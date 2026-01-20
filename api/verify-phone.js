@@ -19,10 +19,23 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { phone } = req.body;
+
+  let { phone } = req.body;
   if (!phone) {
     setCors(res);
     return res.status(400).json({ error: 'Phone number required' });
+  }
+
+  // Normalize phone to +1XXXXXXXXXX
+  let digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) {
+    phone = `+1${digits}`;
+  } else if (digits.length === 11 && digits.startsWith('1')) {
+    phone = `+${digits}`;
+  } else if (digits.startsWith('+' )) {
+    // already in E.164
+  } else {
+    // fallback: use as is
   }
 
   // Airtable credentials from Vercel environment variables
