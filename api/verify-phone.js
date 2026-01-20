@@ -12,18 +12,17 @@ function setCors(res) {
 module.exports = async (req, res) => {
   setCors(res);
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+    setCors(res);
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { phone } = req.body;
   if (!phone) {
-    res.status(400).json({ error: 'Phone number required' });
-    return;
+    setCors(res);
+    return res.status(400).json({ error: 'Phone number required' });
   }
 
   // Airtable credentials from Vercel environment variables
@@ -32,8 +31,8 @@ module.exports = async (req, res) => {
   const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME;
 
   if (!AIRTABLE_API_KEY || !AIRTABLE_BASE_ID || !AIRTABLE_TABLE_NAME) {
-    res.status(500).json({ error: 'Airtable environment variables missing' });
-    return;
+    setCors(res);
+    return res.status(500).json({ error: 'Airtable environment variables missing' });
   }
 
   const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}`;
@@ -46,8 +45,10 @@ module.exports = async (req, res) => {
       },
     });
     const found = response.data.records && response.data.records.length > 0;
-    res.status(200).json({ valid: found });
+    setCors(res);
+    return res.status(200).json({ valid: found });
   } catch (error) {
-    res.status(500).json({ error: 'Airtable error', details: error.message });
+    setCors(res);
+    return res.status(500).json({ error: 'Airtable error', details: error.message });
   }
 };

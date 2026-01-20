@@ -4,6 +4,6 @@
   "main": "index.js",
   "license": "MIT",
   "dependencies": {
-    "airtable": "^0.12.1"
+    "axios": "^1.6.7"
   }
 }
