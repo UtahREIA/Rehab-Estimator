@@ -52,6 +52,9 @@ module.exports = async (req, res) => {
   const filterByFormula = `filterByFormula=${encodeURIComponent(`{Phone} = '${phone}'`)}&maxRecords=1`;
 
   try {
+    // Debug: log normalized phone and filter
+    console.log('Normalized phone:', phone);
+    console.log('Airtable filter:', filterByFormula);
     const response = await axios.get(`${url}?${filterByFormula}`, {
       headers: {
         Authorization: `Bearer ${AIRTABLE_API_KEY}`,
@@ -62,6 +65,7 @@ module.exports = async (req, res) => {
     return res.status(200).json({ valid: found });
   } catch (error) {
     setCors(res);
-    return res.status(500).json({ error: 'Airtable error', details: error.message });
+    // Return more debug info in error
+    return res.status(500).json({ error: 'Airtable error', details: error.message, phone, filterByFormula });
   }
 };
