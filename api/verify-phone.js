@@ -49,7 +49,7 @@ module.exports = async (req, res) => {
   }
 
   const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}`;
-  const filterByFormula = `filterByFormula=${encodeURIComponent(`{Phone} = '${phone}'`)}&maxRecords=1`;
+  const filterByFormula = `filterByFormula=${encodeURIComponent(`{Phone Number} = '${phone}'`)}&maxRecords=1`;
 
   try {
     // Debug: log normalized phone and filter
