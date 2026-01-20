@@ -252,19 +252,36 @@
   }
 
   // Button Logic
-  btn.addEventListener('click', function() {
+  btn.addEventListener('click', async function() {
     const phone = phoneInput.value.replace(/\D/g,''); // strip non-digits
-    
+    msg.innerText = "";
+    phoneInput.style.borderColor = "#cbd5e1";
     if(phone.length < 10) {
       msg.innerText = "Please enter a valid 10-digit phone number.";
       phoneInput.style.borderColor = "#b00020";
       return;
     }
 
-    // Success
-    localStorage.setItem(GATE_KEY, 'unlocked');
-    msg.innerText = "";
-    unlock();
+    msg.innerText = "Verifying...";
+    try {
+      const response = await fetch('https://rehab-estimator-delta.vercel.app/api/verify-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      const data = await response.json();
+      if (data.valid) {
+        localStorage.setItem(GATE_KEY, 'unlocked');
+        msg.innerText = "";
+        unlock();
+      } else {
+        msg.innerText = "Phone number not found. Access denied.";
+        phoneInput.style.borderColor = "#b00020";
+      }
+    } catch (e) {
+      msg.innerText = "Verification failed. Please try again later.";
+      phoneInput.style.borderColor = "#b00020";
+    }
   });
 
   function unlock() {

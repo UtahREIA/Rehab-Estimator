@@ -1,6 +1,6 @@
 // Vercel serverless function to verify phone number using Airtable
 
-const Airtable = require('airtable');
+const axios = require('axios');
 
 // CORS middleware for Vercel serverless function
 function setCors(res) {
@@ -36,21 +36,16 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const base = new Airtable({ apiKey: AIRTABLE_API_KEY }).base(AIRTABLE_BASE_ID);
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}`;
+  const filterByFormula = `filterByFormula=${encodeURIComponent(`{Phone} = '${phone}'`)}&maxRecords=1`;
 
   try {
-    let found = false;
-    await base(AIRTABLE_TABLE_NAME)
-      .select({
-        filterByFormula: `{Phone} = '${phone}'`,
-        maxRecords: 1
-      })
-      .eachPage((records, fetchNextPage) => {
-        if (records.length > 0) {
-          found = true;
-        }
-        fetchNextPage();
-      });
+    const response = await axios.get(`${url}?${filterByFormula}`, {
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_API_KEY}`,
+      },
+    });
+    const found = response.data.records && response.data.records.length > 0;
     res.status(200).json({ valid: found });
   } catch (error) {
     res.status(500).json({ error: 'Airtable error', details: error.message });
