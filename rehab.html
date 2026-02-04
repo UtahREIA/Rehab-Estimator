@@ -383,7 +383,7 @@ const app = (function() {
       const categoriesList = categories;
       // Optionally, you can send more context (e.g., room counts, user notes)
       const context = '';
-      const res = await fetch('/api/ai-pricing', {
+      const res = await fetch('https://rehab-estimator-delta.vercel.app/api/ai-pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ categories: categoriesList, context })
