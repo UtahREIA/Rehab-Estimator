@@ -164,18 +164,10 @@
   </div>
 
   <div class="rw-ai-toolbar">
-    <div class="rw-ai-label">
-      <span>🤖 AI Smart-Fill:</span>
-    </div>
-    <select id="ai-level-select" class="rw-ai-select">
-      <option value="cosmetic">Level 1: Cosmetic Refresh (Paint/Flooring)</option>
-      <option value="standard" selected>Level 2: Standard Rental (Kitchen/Bath)</option>
-      <option value="high">Level 3: High-End Flip (Full Gut/Premium)</option>
-    </select>
-    <button class="rw-btn-ai" onclick="app.applyAI()">
-      <span>✨ Auto-Fill Prices</span>
+    <button class="rw-btn-ai" id="ai-openai-btn" style="background:linear-gradient(135deg,#10b981 0%,#2563eb 100%);">
+      <span>🤖 AI Auto-Fill (OpenAI)</span>
     </button>
-    <span style="font-size:0.8rem; color:#64748b; margin-left:auto;">*Based on 2024 Utah Market Rates</span>
+    <span style="font-size:0.8rem; color:#64748b; margin-left:auto;">*Powered by OpenAI</span>
   </div>
 
   <div class="rw-table-container">
@@ -269,38 +261,6 @@ const app = (function() {
    * - Paint/Flooring: Per SqFt
    * - Trades (Plumbing/Elec): Lump Sum "Allowance" assuming Qty=1
    */
-  const aiPresets = {
-    cosmetic: {
-      "Demolition": [0.50, 0.00], // Minimal cleanup
-      "Painting": [2.00, 1.00],   // $3.00/sf (Paint & carpet focus)
-      "Carpet & Resilient": [1.50, 2.00], // $3.50/sf LVP/Carpet
-      "Landscaping": [500, 250],  // Yard cleanup
-      "Miscellaneous": [500, 250] // Final clean
-    },
-    standard: {
-      "General Conditions": [1000, 200], // Dumpster + permit
-      "Demolition": [1.25, 0.25], // $1.50/sf
-      "Framing & Drywall": [2.50, 1.50], // Patch & Paint
-      "Painting": [2.25, 1.25],   // $3.50/sf (Better quality)
-      "Carpet & Resilient": [2.00, 2.50], // $4.50/sf (Better pad/LVP)
-      "Cabinets & Countertops": [2500, 4000], // Kitchen refresh (Allowance)
-      "Plumbing": [2500, 1500],   // Fixture updates (Allowance)
-      "Electrical": [2000, 1000], // Outlet/Light updates (Allowance)
-      "Appliances": [150, 1500]   // Stainless package
-    },
-    high: {
-      "General Conditions": [2500, 500], 
-      "Demolition": [2.00, 0.50], 
-      "Framing & Drywall": [5.00, 3.00], // Texture/Movement
-      "Painting": [3.50, 2.00],   // $5.50/sf (High end finish)
-      "Hardwood Flooring": [4.50, 6.50], // $11.00/sf Real Wood
-      "Tiling": [12.00, 8.00],    // Custom baths
-      "Cabinets & Countertops": [5000, 15000], // Custom kitchen
-      "Plumbing": [6000, 4000],   // Full re-pipe/Custom showers
-      "Electrical": [5000, 3000], // Panel upgrade/Recessed lighting
-      "Appliances": [500, 4000]   // Viking/Wolf range
-    }
-  };
 
   const tbody = document.getElementById('rw-main-tbody');
   const scopeGrid = document.getElementById('scope-breakdown-grid');
@@ -342,29 +302,6 @@ const app = (function() {
     });
   }
 
-  function applyAI() {
-    const level = aiSelect.value;
-    const presets = aiPresets[level];
-    
-    if(!presets) return;
-    
-    if(!confirm(`Update prices to ${level.toUpperCase()} Utah market rates?\n\nThis updates Labor/Material Unit Prices. Your Quantities remain unchanged.`)) return;
-
-    categories.forEach((cat, idx) => {
-      // Logic: Only fill if category exists in preset for that level
-      if (presets[cat]) {
-        const [lCost, mCost] = presets[cat];
-        const lInput = document.querySelector(`input.inp-l[data-idx="${idx}"]`);
-        const mInput = document.querySelector(`input.inp-m[data-idx="${idx}"]`);
-        
-        // Only update if currently 0 (Optional, but let's overwrite for "Smart" feel)
-        lInput.value = lCost.toFixed(2);
-        mInput.value = mCost.toFixed(2);
-      }
-    });
-    
-    calculate();
-  }
 
   function calculate() {
     let grandTotal = 0;
@@ -437,6 +374,47 @@ const app = (function() {
   }
 
   document.addEventListener('DOMContentLoaded', init);
-  return { reset, applyAI };
+  // --- AI OpenAI Integration ---
+  async function applyOpenAIAI() {
+    const btn = document.getElementById('ai-openai-btn');
+    btn.disabled = true;
+    btn.innerText = 'Thinking...';
+    try {
+      const categoriesList = categories;
+      // Optionally, you can send more context (e.g., room counts, user notes)
+      const context = '';
+      const res = await fetch('/api/ai-pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: categoriesList, context })
+      });
+      const data = await res.json();
+      if (data && data.prices) {
+        categories.forEach((cat, idx) => {
+          if (data.prices[cat]) {
+            const lInput = document.querySelector(`input.inp-l[data-idx="${idx}"]`);
+            const mInput = document.querySelector(`input.inp-m[data-idx="${idx}"]`);
+            if (lInput && typeof data.prices[cat].labor === 'number') lInput.value = data.prices[cat].labor.toFixed(2);
+            if (mInput && typeof data.prices[cat].material === 'number') mInput.value = data.prices[cat].material.toFixed(2);
+          }
+        });
+        calculate();
+      } else {
+        alert('AI did not return valid prices.');
+      }
+    } catch (e) {
+      alert('Failed to fetch AI prices.');
+    }
+    btn.disabled = false;
+    btn.innerText = '🤖 AI (OpenAI) Auto-Fill';
+  }
+
+  // Attach OpenAI AI button listener after DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('ai-openai-btn');
+    if (btn) btn.addEventListener('click', applyOpenAIAI);
+  });
+
+  return { reset };
 })();
 </script>
