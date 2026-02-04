@@ -1,68 +1,78 @@
 // api/ai-pricing.js
 
 export default async function handler(req, res) {
-  // Set CORS headers
+  // 1. Setup CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight
+  // 2. Handle Preflight Options
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // ONLY allow POST
+  // 3. Strict Method Check
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+  }
+
+  // 4. Validate Environment Variables
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'API Key missing in Vercel environment variables.' });
   }
 
   const { categories, context } = req.body;
 
   try {
+    // 5. Fetch from OpenAI with JSON-Object enforcement
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a Utah rehab estimator. Return ONLY JSON.' },
-          { role: 'user', content: `Categories: ${categories.join(", ")}. Context: ${context}` }
+          { 
+            role: 'system', 
+            content: 'You are a professional Utah real estate rehab cost estimator. Return ONLY a valid JSON object. Do not include any text before or after the JSON. Mentioning "JSON" in this instruction is required.' 
+          },
+          { 
+            role: 'user', 
+            content: `Estimate labor and material prices for these categories: ${categories.join(", ")}. Context: ${context || 'none'}. Output keys as category names with "labor" and "material" as numeric values.` 
+          }
         ],
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" } // Enforces pure JSON output
       })
     });
 
     const data = await response.json();
-    // Log the full OpenAI response for debugging
-    console.log('OpenAI response:', JSON.stringify(data));
 
-    if (data.error) {
-      return res.status(500).json({ error: 'OpenAI API error', details: data.error });
+    // 6. Handle API-level errors (Rate limits, account issues)
+    if (!response.ok) {
+      return res.status(response.status).json({ 
+        error: 'OpenAI API Error', 
+        details: data.error?.message || 'Unknown API failure' 
+      });
     }
 
-    if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
-      return res.status(500).json({ error: 'No valid response from OpenAI', details: data });
+    // 7. Extract and Parse Content
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('OpenAI returned an empty response.');
     }
 
-    let prices = {};
-    try {
-      prices = JSON.parse(data.choices[0].message.content);
-    } catch (e) {
-      // Try to extract JSON substring if AI wrapped it in text
-      const match = data.choices[0].message.content.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          prices = JSON.parse(match[0]);
-        } catch (e2) {
-          return res.status(500).json({ error: 'Failed to parse AI response as JSON', details: data.choices[0].message.content });
-        }
-      } else {
-        return res.status(500).json({ error: 'Failed to parse AI response as JSON', details: data.choices[0].message.content });
-      }
-    }
-    res.status(200).json({ prices });
+    // Since response_format is 'json_object', parsing is safer
+    const prices = JSON.parse(content);
+    
+    return res.status(200).json({ prices });
+
   } catch (err) {
-    res.status(500).json({ error: err.message, stack: err.stack });
+    // 8. Catch-all for parsing or connection errors
+    console.error('AI-Pricing Handler Error:', err.message);
+    return res.status(500).json({ 
+      error: 'Internal processing failure', 
+      details: err.message 
+    });
   }
 }
