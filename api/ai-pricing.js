@@ -34,9 +34,35 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
-    const prices = JSON.parse(data.choices[0].message.content);
+    // Log the full OpenAI response for debugging
+    console.log('OpenAI response:', JSON.stringify(data));
+
+    if (data.error) {
+      return res.status(500).json({ error: 'OpenAI API error', details: data.error });
+    }
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+      return res.status(500).json({ error: 'No valid response from OpenAI', details: data });
+    }
+
+    let prices = {};
+    try {
+      prices = JSON.parse(data.choices[0].message.content);
+    } catch (e) {
+      // Try to extract JSON substring if AI wrapped it in text
+      const match = data.choices[0].message.content.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          prices = JSON.parse(match[0]);
+        } catch (e2) {
+          return res.status(500).json({ error: 'Failed to parse AI response as JSON', details: data.choices[0].message.content });
+        }
+      } else {
+        return res.status(500).json({ error: 'Failed to parse AI response as JSON', details: data.choices[0].message.content });
+      }
+    }
     res.status(200).json({ prices });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 }
