@@ -1,9 +1,25 @@
+// CORS middleware for Vercel serverless function
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 // api/ai-pricing.js
 // Endpoint to get AI-generated pricing using OpenAI
 
 
 
 module.exports = async (req, res) => {
+  setCors(res);
+  
+  // Add this for debugging:
+  if (req.method === 'GET') {
+    return res.status(200).json({ message: "API is reachable!" });
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
   // Vercel/Next.js: req.method, req.body, res.status().json()
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
