@@ -1,78 +1,80 @@
-// api/ai-pricing.js
-
 export default async function handler(req, res) {
-  // 1. Setup CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-  // 2. Handle Preflight Options
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  // 3. Strict Method Check
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 4. Validate Environment Variables
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_API_KEY) {
-    return res.status(500).json({ error: 'API Key missing in Vercel environment variables.' });
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Server configuration error.' });
   }
 
-  const { categories, context } = req.body;
+  const { items } = req.body;
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Invalid request body.' });
+  }
+
+  const prompt = `You are a Utah real estate rehab estimator expert with precise knowledge of current 2024-2025 labor and material costs in the Salt Lake City / Utah County market.
+
+Return ONLY a valid JSON object — no markdown, no explanation, no code fences. The structure must be:
+{"prices":{"Category|Label":{"labor":number,"material":number}}}
+
+Rules:
+- "total" method: labor = all-in project cost, material = 0
+- "labor-material" method: split realistic labor and material per unit
+- "per-sqft" method: give per-square-foot rates for labor and material
+- Reflect accurate 2024-2025 Utah market pricing with current inflation
+- Numbers only, no $ signs, no commas
+
+Items to price:
+${items.map(it => `${it.cat}|${it.label} [${it.method}]`).join('\n')}`;
 
   try {
-    // 5. Fetch from OpenAI with JSON-Object enforcement
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are a professional Utah real estate rehab cost estimator. Return ONLY a valid JSON object. Do not include any text before or after the JSON. Mentioning "JSON" in this instruction is required.' 
-          },
-          { 
-            role: 'user', 
-            content: `Estimate labor and material prices for these categories: ${categories.join(", ")}. Context: ${context || 'none'}. Output keys as category names with "labor" and "material" as numeric values.` 
-          }
-        ],
-        response_format: { type: "json_object" } // Enforces pure JSON output
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 4000,
+        temperature: 0.2
       })
     });
 
-    const data = await response.json();
-
-    // 6. Handle API-level errors (Rate limits, account issues)
-    if (!response.ok) {
-      return res.status(response.status).json({ 
-        error: 'OpenAI API Error', 
-        details: data.error?.message || 'Unknown API failure' 
-      });
+    if (!openaiRes.ok) {
+      const errData = await openaiRes.json();
+      console.error('OpenAI error:', errData);
+      return res.status(502).json({ error: 'AI service error. Please try again.' });
     }
 
-    // 7. Extract and Parse Content
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error('OpenAI returned an empty response.');
+    const data = await openaiRes.json();
+    let text = data.choices[0].message.content.trim();
+    // Strip any accidental markdown fences
+    text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      console.error('JSON parse error:', text);
+      return res.status(502).json({ error: 'AI returned invalid data. Please try again.' });
     }
 
-    // Since response_format is 'json_object', parsing is safer
-    const prices = JSON.parse(content);
-    
-    return res.status(200).json({ prices });
+    if (!parsed.prices) {
+      return res.status(502).json({ error: 'AI returned unexpected format.' });
+    }
+
+    return res.status(200).json({ prices: parsed.prices });
 
   } catch (err) {
-    // 8. Catch-all for parsing or connection errors
-    console.error('AI-Pricing Handler Error:', err.message);
-    return res.status(500).json({ 
-      error: 'Internal processing failure', 
-      details: err.message 
-    });
+    console.error('Proxy error:', err);
+    return res.status(500).json({ error: 'Internal server error.' });
   }
 }
