@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utah REIA – Rehab Estimator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+<style>
+  :root {
+    --navy: #0f2340;
+    --navy-mid: #1a3a5c;
+    --green: #1a7a4a;
+    --green-hover: #15693e;
+    --green-light: #22c55e;
+    --green-bg: #f0fdf4;
+    --green-border: #bbf7d0;
+    --blue: #1d4ed8;
+    --blue-light: #eff6ff;
+    --blue-border: #bfdbfe;
+    --slate: #475569;
+    --slate-light: #94a3b8;
+    --border: #e2e8f0;
+    --bg: #f8fafc;
+    --white: #ffffff;
+    --red: #ef4444;
+    --red-bg: #fef2f2;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+    --shadow-lg: 0 20px 50px rgba(0,0,0,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--navy); min-height: 100vh; }
+
+  /* ===== GATE ===== */
+  #gateWrap {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(140deg, #0a1628 0%, var(--navy) 50%, #0e2d4a 100%);
+    padding: 20px;
+  }
+  .gate-card {
+    background: var(--white); border-radius: 20px; box-shadow: var(--shadow-lg);
+    padding: 48px 40px; width: 100%; max-width: 420px; text-align: center;
+  }
+  .gate-card img { max-width: 150px; margin-bottom: 28px; }
+  .gate-card h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+  .gate-card .subtitle { color: var(--slate); font-size: 0.88rem; margin-bottom: 32px; line-height: 1.6; }
+  .gate-field { text-align: left; margin-bottom: 16px; }
+  .gate-field label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--navy); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.07em; }
+  .gate-field input { width: 100%; padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 1rem; font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.2s; }
+  .gate-field input:focus { border-color: var(--green); }
+  .gate-btn { width: 100%; padding: 14px; background: var(--green); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.2s; margin-top: 8px; }
+  .gate-btn:hover { background: var(--green-hover); }
+  #gateMessage { margin-top: 12px; font-size: 0.83rem; color: var(--red); min-height: 18px; }
+  .gate-footer-note { margin-top: 24px; font-size: 0.78rem; color: var(--slate-light); }
+
+  /* ===== APP SHELL ===== */
+  #appWrap { display: none; min-height: 100vh; flex-direction: column; }
+
+  /* ===== TOP NAV ===== */
+  .app-nav {
+    background: var(--navy); color: white; padding: 0 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 58px; position: sticky; top: 0; z-index: 200;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+  }
+  .nav-brand { display: flex; align-items: center; gap: 12px; }
+  .nav-brand img { height: 32px; }
+  .nav-brand span { font-size: 0.9rem; font-weight: 600; color: #93c5fd; }
+  .nav-right { display: flex; align-items: center; gap: 8px; }
+
+
+
+  /* ===== AI STATUS BAR ===== */
+  #aiStatusBar { display: none; padding: 9px 20px; font-size: 0.82rem; align-items: center; gap: 10px; }
+  #aiStatusBar.loading { display: flex; background: var(--blue-light); color: var(--blue); }
+  #aiStatusBar.success { display: flex; background: var(--green-bg); color: var(--green); }
+  #aiStatusBar.error { display: flex; background: var(--red-bg); color: var(--red); }
+
+  /* ===== SUMMARY STRIP ===== */
+  .summary-strip {
+    background: var(--white); border-bottom: 1px solid var(--border);
+    padding: 14px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  }
+  .s-block { display: flex; flex-direction: column; }
+  .s-block .sl { font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--slate-light); }
+  .s-block .sv { font-size: 1.4rem; font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .s-block.grand .sv { color: var(--green); font-size: 1.9rem; }
+  .s-sep { width: 1px; height: 36px; background: var(--border); flex-shrink: 0; }
+  #reportTitle {
+    flex: 1; min-width: 180px; padding: 8px 12px;
+    border: 1.5px solid var(--border); border-radius: 7px;
+    font-size: 0.92rem; font-family: 'DM Sans', sans-serif; font-weight: 600;
+    color: var(--navy); outline: none; transition: border-color 0.2s;
+  }
+  #reportTitle:focus { border-color: var(--green); }
+  #reportTitle::placeholder { font-weight: 400; color: var(--slate-light); }
+  .s-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  .btn-primary {
+    padding: 9px 18px;
+    background: linear-gradient(135deg, #059669 0%, #1d4ed8 120%);
+    color: white; border: none; border-radius: 7px;
+    font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    display: flex; align-items: center; gap: 7px;
+    box-shadow: 0 2px 10px rgba(5,150,105,0.25); transition: all 0.15s;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(5,150,105,0.35); }
+  .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+  .btn-secondary {
+    padding: 8px 14px; border: 1.5px solid var(--border); background: var(--white);
+    border-radius: 7px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    color: var(--slate); font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .btn-secondary:hover { border-color: var(--slate); }
+  .btn-danger { color: var(--red); border-color: #fecaca; }
+  .btn-danger:hover { background: var(--red-bg); border-color: var(--red); }
+
+  /* ===== TAB BAR ===== */
+  .tab-bar {
+    background: var(--white); border-bottom: 1px solid var(--border);
+    display: flex; overflow-x: auto; padding: 0 16px;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-pill {
+    padding: 11px 14px; border: none; background: none; cursor: pointer;
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--slate-light); white-space: nowrap;
+    border-bottom: 3px solid transparent; font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  }
+  .tab-pill:hover { color: var(--slate); }
+  .tab-pill.active { color: var(--navy); border-bottom-color: var(--green); }
+  .tab-pill .tp-sub { font-size: 0.62rem; font-weight: 500; color: var(--green); font-variant-numeric: tabular-nums; font-style: normal; min-height: 10px; }
+
+  /* ===== PANELS ===== */
+  .panels-area { flex: 1; padding: 20px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ===== EXPENSE TABLE ===== */
+  .exp-card {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm);
+  }
+  .exp-table { width: 100%; border-collapse: collapse; }
+  .exp-table thead { background: #f1f5f9; border-bottom: 2px solid var(--border); }
+  .exp-table th {
+    padding: 9px 12px; font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.07em; color: var(--slate);
+    text-align: left;
+  }
+  .exp-table th.r { text-align: right; }
+  .exp-table th.c { text-align: center; }
+  .exp-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .exp-row:last-child td { border-bottom: none; }
+  .exp-row:hover td { background: #fbfcfd; }
+  .exp-row.is-done td { opacity: 0.45; }
+  .exp-row.is-done td:first-child { opacity: 1; }
+
+  .chk { display: flex; justify-content: center; }
+  .chk input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--green); }
+
+  .inp-label { width: 100%; padding: 6px 9px; border: 1px solid var(--border); border-radius: 5px; font-size: 0.85rem; font-family: 'DM Sans', sans-serif; color: var(--navy); outline: none; transition: border-color 0.15s; }
+  .inp-label:focus { border-color: var(--green); }
+
+  .sel-method { width: 100%; padding: 6px 9px; border: 1px solid var(--border); border-radius: 5px; font-size: 0.8rem; font-family: 'DM Sans', sans-serif; color: var(--navy); background: white; outline: none; cursor: pointer; }
+  .sel-method:focus { border-color: var(--green); }
+
+  .inp-num {
+    width: 100%; padding: 6px 9px; border: 1px solid var(--border); border-radius: 5px;
+    font-size: 0.85rem; font-family: 'DM Mono', monospace; color: var(--navy);
+    text-align: right; outline: none; transition: border-color 0.15s;
+    background: white;
+  }
+  .inp-num:focus { border-color: var(--green); }
+  .inp-num:disabled { background: var(--bg); color: var(--slate-light); cursor: not-allowed; }
+  .inp-num.ai-hit { border-color: #93c5fd; background: #f0f7ff; }
+
+  .cell-total { text-align: right; font-weight: 700; font-size: 0.88rem; font-family: 'DM Mono', monospace; white-space: nowrap; color: var(--slate-light); }
+  .cell-total.has-val { color: var(--green); }
+
+  .del-btn { background: none; border: none; cursor: pointer; color: var(--slate-light); padding: 3px 5px; border-radius: 4px; font-size: 0.9rem; transition: all 0.15s; }
+  .del-btn:hover { color: var(--red); background: var(--red-bg); }
+
+  .card-foot { padding: 11px 14px; display: flex; align-items: center; justify-content: space-between; background: #fafbfc; border-top: 1px solid var(--border); }
+  .add-btn { padding: 7px 14px; background: white; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: var(--slate); font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+  .add-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+  .subtotal-lbl { font-size: 0.82rem; color: var(--slate); }
+  .subtotal-lbl strong { color: var(--navy); font-family: 'DM Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* Spinner */
+  .spin { width: 13px; height: 13px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Print */
+
+
+  @media (max-width: 680px) {
+    .summary-strip { padding: 10px 12px; gap: 12px; }
+    .panels-area { padding: 12px; }
+    .s-block.grand .sv { font-size: 1.5rem; }
+    .exp-table th:nth-child(4), .exp-table td:nth-child(4),
+    .exp-table th:nth-child(6), .exp-table td:nth-child(6) { display: none; }
+  }
+
+  /* ===== STEP NAVIGATOR ===== */
+  .step-nav {
+    background: var(--white); border-bottom: 1px solid var(--border);
+    padding: 16px 24px; display: flex; align-items: center; justify-content: center;
+    gap: 0;
+  }
+  .step-item {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px; cursor: pointer; min-width: 120px;
+  }
+  .step-circle {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 2px solid var(--border); background: var(--white);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700; color: var(--slate-light);
+    transition: all 0.2s; position: relative; z-index: 1;
+  }
+  .step-item.active .step-circle {
+    background: var(--navy); border-color: var(--navy); color: white;
+  }
+  .step-item.done .step-circle {
+    background: var(--green); border-color: var(--green); color: white;
+  }
+  .step-label {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--slate-light); transition: color 0.2s;
+    white-space: nowrap;
+  }
+  .step-item.active .step-label { color: var(--navy); }
+  .step-item.done .step-label { color: var(--green); }
+  .step-subtotal {
+    font-size: 0.68rem; font-weight: 500; color: var(--green);
+    font-family: 'DM Mono', monospace; min-height: 12px;
+  }
+  .step-connector {
+    height: 2px; flex: 1; max-width: 80px; margin-bottom: 28px;
+    background: var(--border); transition: background 0.2s;
+  }
+  .step-connector.done { background: var(--green); }
+
+  /* ===== SECTION HEADER ===== */
+  .section-header {
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 8px 20px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .section-header-title {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--slate-light);
+  }
+  .section-nav-btns { display: flex; gap: 8px; }
+  .step-nav-btn {
+    padding: 6px 14px; border: 1.5px solid var(--border); background: white;
+    border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+    color: var(--slate); font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .step-nav-btn.next { background: var(--navy); color: white; border-color: var(--navy); }
+  .step-nav-btn.next:hover { background: var(--navy-mid); }
+  .step-nav-btn:not(.next):hover { border-color: var(--slate); }
+
+  /* ===== RESULTS PAGE ===== */
+  .results-page { display: none; padding: 24px; }
+  .results-page.active { display: block; }
+  .results-header { margin-bottom: 24px; }
+  .results-header h2 { font-size: 1.4rem; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+  .results-header p { font-size: 0.85rem; color: var(--slate); }
+
+  .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 600px) { .results-grid { grid-template-columns: 1fr; } }
+
+  .result-card {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; box-shadow: var(--shadow-sm);
+  }
+  .result-card.highlight { border-color: var(--green-border); background: var(--green-bg); }
+  .result-card .rc-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--slate-light); margin-bottom: 6px; }
+  .result-card .rc-value { font-size: 2rem; font-weight: 800; color: var(--navy); font-family: 'DM Mono', monospace; }
+  .result-card.highlight .rc-value { color: var(--green); }
+  .result-card .rc-sub { font-size: 0.78rem; color: var(--slate); margin-top: 4px; }
+
+  .results-breakdown {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); margin-bottom: 24px;
+  }
+  .rb-header {
+    background: #f1f5f9; padding: 12px 16px; border-bottom: 2px solid var(--border);
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--slate);
+    display: grid; grid-template-columns: 1fr 1fr auto; gap: 16px;
+  }
+  .rb-header span:last-child { text-align: right; min-width: 100px; }
+  .rb-row {
+    padding: 10px 16px; border-bottom: 1px solid #f1f5f9;
+    display: grid; grid-template-columns: 1fr 1fr auto; gap: 16px;
+    align-items: center; font-size: 0.85rem;
+  }
+  .rb-row:last-child { border-bottom: none; }
+  .rb-row:hover { background: #fafbfc; }
+  .rb-section { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--slate-light); background: var(--bg); padding: 6px 16px; border-bottom: 1px solid var(--border); }
+  .rb-cat { font-weight: 600; color: var(--navy); }
+  .rb-badge { font-size: 0.68rem; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+  .rb-badge.ext { background: #fef3c7; color: #92400e; }
+  .rb-badge.int { background: #dbeafe; color: #1e40af; }
+  .rb-amount { text-align: right; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--green); min-width: 100px; }
+  .rb-amount.zero { color: var(--slate-light); font-weight: 400; }
+  .rb-total-row {
+    padding: 12px 16px; background: var(--navy); color: white;
+    display: grid; grid-template-columns: 1fr 1fr auto; gap: 16px;
+    font-weight: 800; font-size: 0.9rem;
+  }
+  .rb-total-row .rb-amount { color: #6ee7b7; }
+
+  .results-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+</style>
+</head>
+<body>
+
+<!-- ===== GATE ===== -->
+<div id="gateWrap">
+  <div class="gate-card">
+    <img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA">
+    <h1>Rehab Estimator</h1>
+    <p class="subtitle">Enter your phone number to unlock the calculator.<br>For Utah REIA members only.</p>
+    <div class="gate-field">
+      <label>Phone Number</label>
+      <input id="gatePhone" type="tel" placeholder="(801) 555-1234" inputmode="tel">
+    </div>
+    <div class="g-recaptcha" data-sitekey="6LcrKXIsAAAAANi8RSH29vfM5NyEIOA0b1G25-n9" data-theme="light" style="margin-bottom:12px;display:flex;justify-content:center;"></div>
+    <button class="gate-btn" id="gateBtn">Unlock Estimator →</button>
+    <div id="gateMessage"></div>
+    <p class="gate-footer-note">Need access? Contact Utah REIA.</p>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="appWrap">
+
+  <!-- Top Nav -->
+  <nav class="app-nav">
+    <div class="nav-brand">
+      <img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA">
+      <span>Rehab Estimator</span>
+    </div>
+  </nav>
+
+  <!-- AI Status -->
+  <div id="aiStatusBar">
+    <span class="spin"></span>
+    <span id="aiStatusTxt"></span>
+  </div>
+
+  <!-- Summary Strip -->
+  <div class="summary-strip">
+    <div class="s-block grand">
+      <span class="sl">Grand Total</span>
+      <span class="sv" id="grandTotal">$0.00</span>
+    </div>
+    <div class="s-sep"></div>
+    <div class="s-block">
+      <span class="sl">Exterior</span>
+      <span class="sv" id="extTotal">$0.00</span>
+    </div>
+    <div class="s-sep"></div>
+    <div class="s-block">
+      <span class="sl">Interior</span>
+      <span class="sv" id="intTotal">$0.00</span>
+    </div>
+    <div class="s-sep"></div>
+    <div class="s-block">
+      <span class="sl">Completed</span>
+      <span class="sv" id="doneCount">0</span>
+    </div>
+    <div class="s-sep"></div>
+    <input type="text" id="reportTitle" placeholder="Report title – e.g. 123 Main St, Salt Lake City">
+    <div class="s-actions">
+      <button class="btn-primary" id="aiBtn" onclick="doAIFill()">
+        <span>✦</span> AI Auto-Fill Prices
+      </button>
+      <button class="btn-secondary" onclick="exportExcel()">📊 Export Excel</button>
+      <button class="btn-secondary" onclick="printCalculator()">🖨 Print</button>
+      <button class="btn-secondary btn-danger" onclick="doReset()">✕ Reset</button>
+    </div>
+  </div>
+
+  <!-- Step Navigator -->
+  <div class="step-nav">
+    <div class="step-item active" id="step-ext" onclick="goStep('exterior')">
+      <div class="step-circle" id="step-circle-ext">1</div>
+      <div class="step-label">Exterior Expenses</div>
+      <div class="step-subtotal" id="step-sub-ext"></div>
+    </div>
+    <div class="step-connector" id="connector-1"></div>
+    <div class="step-item" id="step-int" onclick="goStep('interior')">
+      <div class="step-circle" id="step-circle-int">2</div>
+      <div class="step-label">Interior Expenses</div>
+      <div class="step-subtotal" id="step-sub-int"></div>
+    </div>
+    <div class="step-connector" id="connector-2"></div>
+    <div class="step-item" id="step-res" onclick="goStep('results')">
+      <div class="step-circle" id="step-circle-res">3</div>
+      <div class="step-label">Results</div>
+      <div class="step-subtotal" id="step-sub-res"></div>
+    </div>
+  </div>
+
+  <!-- Section header + sub-tabs -->
+  <div class="section-header" id="sectionHeader">
+    <span class="section-header-title" id="sectionHeaderTitle">Exterior Expenses</span>
+    <div class="section-nav-btns">
+      <button class="step-nav-btn" id="prevStepBtn" onclick="prevStep()" style="display:none">← Back</button>
+      <button class="step-nav-btn next" id="nextStepBtn" onclick="nextStep()">Next: Interior Expenses →</button>
+    </div>
+  </div>
+
+  <!-- Sub-tab bar -->
+  <div class="tab-bar" id="tabBar"></div>
+
+  <!-- Panels area (expense tables) -->
+  <div class="panels-area" id="panelsArea"></div>
+
+  <!-- Results page -->
+  <div class="results-page" id="resultsPage">
+    <div class="results-header">
+      <h2 id="results-title">Estimate Results</h2>
+      <p>Full cost breakdown for your rehab project</p>
+    </div>
+    <div class="results-grid">
+      <div class="result-card highlight">
+        <div class="rc-label">Grand Total Estimate</div>
+        <div class="rc-value" id="res-grand">$0.00</div>
+        <div class="rc-sub">All exterior + interior expenses</div>
+      </div>
+      <div class="result-card">
+        <div class="rc-label">Exterior Expenses</div>
+        <div class="rc-value" id="res-ext">$0.00</div>
+        <div class="rc-sub">Roof, siding, concrete, landscaping & more</div>
+      </div>
+      <div class="result-card">
+        <div class="rc-label">Interior Expenses</div>
+        <div class="rc-value" id="res-int">$0.00</div>
+        <div class="rc-sub">Kitchen, bathrooms, flooring, HVAC & more</div>
+      </div>
+      <div class="result-card">
+        <div class="rc-label">Completed Items</div>
+        <div class="rc-value" id="res-done">0</div>
+        <div class="rc-sub">Line items marked as done</div>
+      </div>
+    </div>
+
+    <div class="results-breakdown">
+      <div class="rb-header"><span>Category</span><span>Section</span><span>Total</span></div>
+      <div id="rb-body"></div>
+      <div class="rb-total-row">
+        <span>Grand Total</span><span></span>
+        <span class="rb-amount" id="rb-grand">$0.00</span>
+      </div>
+    </div>
+
+    <div class="results-actions">
+      <button class="btn-secondary" onclick="goStep('exterior')">← Edit Exterior</button>
+      <button class="btn-secondary" onclick="goStep('interior')">← Edit Interior</button>
+      <button class="btn-secondary" onclick="exportExcel()">📊 Export Excel</button>
+      <button class="btn-secondary" onclick="printCalculator()">🖨 Print</button>
+    </div>
+  </div>
+
+  <footer style="text-align:center;padding:14px;font-size:0.72rem;color:var(--slate-light);border-top:1px solid var(--border);background:white;">
+    © 2025 Utah REIA Repair Estimator · All rights reserved
+  </footer>
+
+</div>
+
+<script>
+// ============================================================
+// CATEGORIES & DEFAULT ITEMS
+// ============================================================
+const CATS = [
+  { id:'roof', label:'Roof', items:[
+    {label:'Roof Maintenance',method:'total'},{label:'Roof Replacement',method:'total'},
+    {label:'Gutters',method:'total'},{label:'Soffit/Fascia',method:'total'}
+  ]},
+  { id:'ext-carp', label:'Ext Carpentry', items:[
+    {label:'Siding Repair/Replace',method:'labor-material'},{label:'Exterior Doors',method:'total'},
+    {label:'Windows',method:'total'},{label:'Decks/Porches',method:'total'}
+  ]},
+  { id:'concrete', label:'Concrete', items:[
+    {label:'Driveway',method:'per-sqft'},{label:'Sidewalk/Walkway',method:'per-sqft'},
+    {label:'Patio Slab',method:'per-sqft'},{label:'Foundation Repair',method:'total'}
+  ]},
+  { id:'garage', label:'Garage', items:[
+    {label:'Garage Door',method:'total'},{label:'Garage Door Opener',method:'total'},
+    {label:'Garage Floor Epoxy',method:'per-sqft'}
+  ]},
+  { id:'landscaping', label:'Landscaping', items:[
+    {label:'Lawn/Sod',method:'per-sqft'},{label:'Tree Trimming/Removal',method:'total'},
+    {label:'Sprinkler System',method:'total'},{label:'Cleanup/Haul Away',method:'total'}
+  ]},
+  { id:'painting', label:'Painting', items:[
+    {label:'Interior Paint – Full House',method:'per-sqft'},{label:'Exterior Paint',method:'per-sqft'},
+    {label:'Trim & Doors',method:'total'},{label:'Cabinets Painted',method:'total'}
+  ]},
+  { id:'septic', label:'Septic', items:[
+    {label:'Septic Inspection',method:'total'},{label:'Septic Pump/Clean',method:'total'},
+    {label:'Septic Repair',method:'total'},{label:'New Septic System',method:'total'}
+  ]},
+  { id:'foundation', label:'Foundation', items:[
+    {label:'Crack Injection',method:'total'},{label:'Waterproofing',method:'total'},
+    {label:'Pier/Beam Repair',method:'total'}
+  ]},
+  { id:'fences', label:'Fences', items:[
+    {label:'Wood Fence',method:'total'},{label:'Vinyl Fence',method:'total'},
+    {label:'Chain Link Fence',method:'total'},{label:'Gate',method:'total'}
+  ]},
+  { id:'kitchen', label:'Kitchen', items:[
+    {label:'Cabinets',method:'total'},{label:'Countertops',method:'per-sqft'},
+    {label:'Appliances',method:'total'},{label:'Sink & Faucet',method:'total'},
+    {label:'Backsplash',method:'per-sqft'}
+  ]},
+  { id:'bathrooms', label:'Bathrooms', items:[
+    {label:'Full Bathroom Remodel',method:'total'},{label:'Vanity & Fixtures',method:'total'},
+    {label:'Shower/Tub',method:'total'},{label:'Tile Work',method:'per-sqft'},
+    {label:'Toilet',method:'total'}
+  ]},
+  { id:'flooring', label:'Flooring', items:[
+    {label:'Hardwood',method:'per-sqft'},{label:'LVP/LVT',method:'per-sqft'},
+    {label:'Carpet',method:'per-sqft'},{label:'Tile',method:'per-sqft'}
+  ]},
+  { id:'hvac', label:'HVAC', items:[
+    {label:'Furnace Replacement',method:'total'},{label:'A/C Unit',method:'total'},
+    {label:'Ductwork',method:'total'},{label:'Water Heater',method:'total'}
+  ]},
+  { id:'plumbing', label:'Plumbing', items:[
+    {label:'Re-pipe (Partial)',method:'total'},{label:'Re-pipe (Full)',method:'total'},
+    {label:'Drain Line Repair',method:'total'},{label:'Fixtures',method:'total'}
+  ]},
+  { id:'electrical', label:'Electrical', items:[
+    {label:'Panel Upgrade',method:'total'},{label:'Rewire (Partial)',method:'total'},
+    {label:'Outlets/Switches',method:'total'},{label:'Light Fixtures',method:'total'}
+  ]},
+  { id:'demo', label:'Demo', items:[
+    {label:'Interior Demo',method:'total'},{label:'Dumpster Rental',method:'total'},
+    {label:'Haul Away',method:'total'}
+  ]},
+  { id:'misc', label:'Misc', items:[
+    {label:'General Conditions',method:'total'},{label:'Permits',method:'total'},
+    {label:'Contingency',method:'total'}
+  ]}
+];
+
+const STORE = 'utah_reia_v5';
+let state = {};
+let activeTab = CATS[0].id;
+
+// Proxy URL — OpenAI key lives server-side in Vercel env, never exposed in browser
+const PROXY_URL = 'https://rehab-estimator-delta.vercel.app/api/ai-pricing';
+
+// ============================================================
+// ============================================================
+// STEP NAVIGATION
+// ============================================================
+const EXTERIOR_CATS = ['roof','ext-carp','concrete','garage','landscaping','painting','septic','foundation','fences'];
+const INTERIOR_CATS = ['kitchen','bathrooms','flooring','hvac','plumbing','electrical','demo','misc'];
+let currentStep = 'exterior';
+
+function goStep(step) {
+  currentStep = step;
+  const panelsArea = document.getElementById('panelsArea');
+  const resultsPage = document.getElementById('resultsPage');
+  const tabBar = document.getElementById('tabBar');
+  const sectionHeader = document.getElementById('sectionHeader');
+
+  if (step === 'results') {
+    panelsArea.style.display = 'none';
+    tabBar.style.display = 'none';
+    sectionHeader.style.display = 'none';
+    resultsPage.classList.add('active');
+    buildResultsPage();
+  } else {
+    panelsArea.style.display = '';
+    tabBar.style.display = '';
+    sectionHeader.style.display = '';
+    resultsPage.classList.remove('active');
+    buildTabsForStep(step);
+    buildPanelsForStep(step);
+    renderAll();
+    recalcAll();
+  }
+  applyStepUI(step);
+}
+
+function applyStepUI(step) {
+  currentStep = step;
+  // Update step circles
+  const steps = ['exterior','interior','results'];
+  const ids = ['ext','int','res'];
+  const stepIdx = steps.indexOf(step);
+  steps.forEach((s, i) => {
+    const el = document.getElementById('step-' + ids[i]);
+    const circle = document.getElementById('step-circle-' + ids[i]);
+    if (!el || !circle) return;
+    el.classList.remove('active','done');
+    if (i < stepIdx) { el.classList.add('done'); circle.innerHTML = '✓'; }
+    else if (i === stepIdx) { el.classList.add('active'); circle.innerHTML = i+1; }
+    else { circle.innerHTML = i+1; }
+  });
+  // Connectors
+  const c1 = document.getElementById('connector-1'); if(c1) c1.classList.toggle('done', stepIdx > 0);
+  const c2 = document.getElementById('connector-2'); if(c2) c2.classList.toggle('done', stepIdx > 1);
+  // Section header title
+  const titles = { exterior: 'Exterior Expenses', interior: 'Interior Expenses', results: 'Results' };
+  const titleEl = document.getElementById('sectionHeaderTitle'); if(titleEl) titleEl.innerText = titles[step] || '';
+  // Prev/Next buttons
+  const prevBtn = document.getElementById('prevStepBtn');
+  const nextBtn = document.getElementById('nextStepBtn');
+  if (!prevBtn || !nextBtn) return;
+  if (step === 'exterior') {
+    prevBtn.style.display = 'none';
+    nextBtn.style.display = '';
+    nextBtn.innerText = 'Next: Interior Expenses →';
+    nextBtn.onclick = () => goStep('interior');
+  } else if (step === 'interior') {
+    prevBtn.style.display = '';
+    prevBtn.innerText = '← Exterior Expenses';
+    prevBtn.onclick = () => goStep('exterior');
+    nextBtn.style.display = '';
+    nextBtn.innerText = 'View Results →';
+    nextBtn.onclick = () => goStep('results');
+  } else {
+    prevBtn.style.display = 'none';
+    nextBtn.style.display = 'none';
+  }
+}
+
+function nextStep() { if (currentStep === 'exterior') goStep('interior'); else if (currentStep === 'interior') goStep('results'); }
+function prevStep() { if (currentStep === 'interior') goStep('exterior'); else if (currentStep === 'results') goStep('interior'); }
+
+function buildTabsForStep(step) {
+  const cats = step === 'exterior' ? EXTERIOR_CATS : INTERIOR_CATS;
+  const bar = document.getElementById('tabBar');
+  bar.innerHTML = '';
+  const firstCat = cats[0];
+  cats.forEach(cid => {
+    const cat = CATS.find(c => c.id === cid);
+    if (!cat) return;
+    const b = document.createElement('button');
+    b.className = 'tab-pill' + (cid === activeTab ? ' active' : '');
+    b.id = 'tp-' + cid;
+    b.innerHTML = `${cat.label}<span class="tp-sub" id="tpsub-${cid}"></span>`;
+    b.onclick = () => switchTab(cid);
+    bar.appendChild(b);
+  });
+  // If activeTab not in this step's cats, switch to first
+  if (!cats.includes(activeTab)) {
+    activeTab = cats[0];
+  }
+  // Ensure active tab is highlighted
+  cats.forEach(cid => {
+    const btn = document.getElementById('tp-' + cid);
+    if (btn) btn.classList.toggle('active', cid === activeTab);
+  });
+}
+
+function buildPanelsForStep(step) {
+  const cats = step === 'exterior' ? EXTERIOR_CATS : INTERIOR_CATS;
+  const area = document.getElementById('panelsArea');
+  area.innerHTML = '';
+  cats.forEach(cid => {
+    const cat = CATS.find(c => c.id === cid);
+    if (!cat) return;
+    const d = document.createElement('div');
+    d.className = 'tab-panel' + (cid === activeTab ? ' active' : '');
+    d.id = 'panel-' + cid;
+    d.setAttribute('data-label', cat.label);
+    d.innerHTML = `
+      <div class="exp-card">
+        <table class="exp-table">
+          <thead>
+            <tr>
+              <th class="c" style="width:40px;">Done</th>
+              <th>Label</th>
+              <th style="width:155px;">Calculation Method</th>
+              <th class="r" style="width:95px;">Qty / SqFt</th>
+              <th class="r" style="width:110px;">Labor ($)</th>
+              <th class="r" style="width:110px;">Material ($)</th>
+              <th class="r" style="width:105px;">Total</th>
+              <th style="width:34px;"></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-${cid}"></tbody>
+        </table>
+        <div class="card-foot">
+          <button class="add-btn" onclick="addRow('${cid}')">+ Add expense</button>
+          <span class="subtotal-lbl">Subtotal: <strong id="sub-${cid}">$0.00</strong></span>
+        </div>
+      </div>`;
+    area.appendChild(d);
+  });
+}
+
+function buildResultsPage() {
+  const title = document.getElementById('reportTitle').value || 'Rehab Estimate';
+  document.getElementById('results-title').innerText = title;
+
+  let grand = 0, extSum = 0, intSum = 0, done = 0;
+  CATS.forEach(c => {
+    state[c.id].rows.forEach(r => {
+      const t = rowTotal(r);
+      grand += t;
+      if (EXTERIOR_CATS.includes(c.id)) extSum += t;
+      else intSum += t;
+      if (r.done) done++;
+    });
+  });
+
+  document.getElementById('res-grand').innerText = fmt(grand);
+  document.getElementById('res-ext').innerText = fmt(extSum);
+  document.getElementById('res-int').innerText = fmt(intSum);
+  document.getElementById('res-done').innerText = done;
+  document.getElementById('rb-grand').innerText = fmt(grand);
+
+  // Build breakdown table
+  const body = document.getElementById('rb-body');
+  body.innerHTML = '';
+
+  // Exterior section
+  let extHdr = document.createElement('div');
+  extHdr.className = 'rb-section'; extHdr.innerText = 'Exterior Expenses';
+  body.appendChild(extHdr);
+  EXTERIOR_CATS.forEach(cid => {
+    const cat = CATS.find(c => c.id === cid);
+    let sub = 0;
+    state[cid].rows.forEach(r => sub += rowTotal(r));
+    const row = document.createElement('div');
+    row.className = 'rb-row';
+    row.innerHTML = `<span class="rb-cat">${cat.label}</span><span><span class="rb-badge ext">Exterior</span></span><span class="rb-amount ${sub===0?'zero':''}">${fmt(sub)}</span>`;
+    body.appendChild(row);
+  });
+
+  // Interior section
+  let intHdr = document.createElement('div');
+  intHdr.className = 'rb-section'; intHdr.innerText = 'Interior Expenses';
+  body.appendChild(intHdr);
+  INTERIOR_CATS.forEach(cid => {
+    const cat = CATS.find(c => c.id === cid);
+    let sub = 0;
+    state[cid].rows.forEach(r => sub += rowTotal(r));
+    const row = document.createElement('div');
+    row.className = 'rb-row';
+    row.innerHTML = `<span class="rb-cat">${cat.label}</span><span><span class="rb-badge int">Interior</span></span><span class="rb-amount ${sub===0?'zero':''}">${fmt(sub)}</span>`;
+    body.appendChild(row);
+  });
+}
+
+
+
+// ============================================================
+// GATE
+// ============================================================
+(function() {
+  const GATE_KEY = 'utah_reia_access';
+  // Use a more meaningful token (timestamp + salt) so it can't be trivially forged
+  const VALID_TOKEN_PREFIX = 'ureia_unlocked_';
+  function isValidToken(t) { return t && t.startsWith(VALID_TOKEN_PREFIX); }
+  if (isValidToken(localStorage.getItem(GATE_KEY))) { show(); return; }
+
+  document.getElementById('gateBtn').onclick = async () => {
+    const phone = document.getElementById('gatePhone').value.replace(/\D/g,'');
+    const msg = document.getElementById('gateMessage');
+    const inp = document.getElementById('gatePhone');
+    msg.innerText = ''; inp.style.borderColor = '';
+
+    // Phone validation
+    if (phone.length < 10) {
+      msg.innerText = 'Please enter a valid 10-digit phone number.';
+      inp.style.borderColor = 'var(--red)'; return;
+    }
+
+    // CAPTCHA validation (Google reCAPTCHA v2)
+    const captchaToken = grecaptcha ? grecaptcha.getResponse() : '';
+    if (!captchaToken) {
+      msg.innerText = 'Please complete the \'I am not a robot\' verification.';
+      return;
+    }
+
+    msg.innerText = 'Verifying…';
+    document.getElementById('gateBtn').disabled = true;
+
+    try {
+      const r = await fetch('https://rehab-estimator-delta.vercel.app/api/verify-phone', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ phone, captcha: captchaToken })
+      });
+
+      if (!r.ok) throw new Error('Server error ' + r.status);
+      const d = await r.json();
+
+      if (d.valid) {
+        // Store a meaningful token with timestamp
+        localStorage.setItem(GATE_KEY, VALID_TOKEN_PREFIX + Date.now());
+        show();
+      } else {
+        msg.innerText = d.message || 'Phone number not found. Access denied.';
+        inp.style.borderColor = 'var(--red)';
+        // Reset captcha on failure
+        if (window.grecaptcha) grecaptcha.reset();
+      }
+    } catch(e) {
+      // NO silent fallback — show real error instead of granting access
+      msg.innerText = 'Verification failed. Please check your connection and try again.';
+      if (window.grecaptcha) grecaptcha.reset();
+    } finally {
+      document.getElementById('gateBtn').disabled = false;
+    }
+  };
+
+  document.getElementById('gatePhone').onkeydown = e => { if (e.key==='Enter') document.getElementById('gateBtn').click(); };
+
+  function show() {
+    document.getElementById('gateWrap').style.display = 'none';
+    document.getElementById('appWrap').style.display = 'flex';
+    document.getElementById('appWrap').style.flexDirection = 'column';
+    initApp();
+  }
+})();
+
+// ============================================================
+// INIT
+// ============================================================
+// INIT
+// ============================================================
+function initApp() {
+  loadState();
+  buildTabsForStep('exterior');
+  buildPanelsForStep('exterior');
+  renderAll();
+  recalcAll();
+  loadTitle();
+  // Apply step UI state without re-building panels
+  applyStepUI('exterior');
+}
+
+// ============================================================
+// API KEY
+// ============================================================
+
+
+// ============================================================
+// STATE
+// ============================================================
+function loadState() {
+  // Migrate from old storage keys if present
+  const OLD_KEYS = ['ghl_est_data_v3', 'utah_reia_v4'];
+  OLD_KEYS.forEach(k => { if (localStorage.getItem(k)) { localStorage.removeItem(k); } });
+
+  try {
+    const raw = localStorage.getItem(STORE);
+    state = raw ? JSON.parse(raw) : {};
+  } catch(e) {
+    console.warn('Rehab Estimator: failed to parse saved state, resetting.', e);
+    state = {};
+    localStorage.removeItem(STORE);
+  }
+  // Ensure every category exists in state (handles new categories added in future)
+  CATS.forEach(cat => {
+    if (!state[cat.id] || !Array.isArray(state[cat.id].rows)) {
+      state[cat.id] = { rows: cat.items.map(it => ({ label:it.label, method:it.method, qty:'', labor:'', material:'', done:false, aiHit:false })) };
+    }
+    // Ensure all row fields exist (handles future new fields gracefully)
+    state[cat.id].rows = state[cat.id].rows.map(r => ({
+      label: r.label || '', method: r.method || 'total',
+      qty: r.qty || '', labor: r.labor || '', material: r.material || '',
+      done: !!r.done, aiHit: !!r.aiHit
+    }));
+  });
+}
+let _persistTimer = null;
+function persist() {
+  // Debounce: only write to localStorage 600ms after last change
+  clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    localStorage.setItem(STORE, JSON.stringify(state));
+  }, 600);
+}
+function persistNow() {
+  clearTimeout(_persistTimer);
+  localStorage.setItem(STORE, JSON.stringify(state));
+}
+
+// ============================================================
+// TABS (delegated to goStep)
+// ============================================================
+function buildTabs() { buildTabsForStep(currentStep); }
+function switchTab(id) {
+  document.querySelectorAll('.tab-pill').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const tpEl = document.getElementById('tp-'+id); if(tpEl) tpEl.classList.add('active');
+  const panelEl = document.getElementById('panel-'+id); if(panelEl) panelEl.classList.add('active');
+  activeTab = id;
+}
+
+// ============================================================
+// PANELS (delegated to goStep)
+// ============================================================
+function buildPanels() { buildPanelsForStep(currentStep); }
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderAll() { CATS.forEach(c => renderRows(c.id)); }
+
+function renderRows(cid) {
+  const tbody = document.getElementById('tbody-' + cid);
+  if (!tbody) return; // panel not in DOM for current step — skip
+  tbody.innerHTML = '';
+  state[cid].rows.forEach((row, i) => tbody.appendChild(mkRow(cid, i, row)));
+}
+
+function mkRow(cid, i, row) {
+  const isTot = row.method === 'total';
+  const isPSF = row.method === 'per-sqft';
+  const isLM  = row.method === 'labor-material';
+  const disableQty = isTot;
+  const disableMat = isTot;
+  const laborPH = isTot ? 'Total $' : '0.00';
+
+  const tr = document.createElement('tr');
+  tr.className = 'exp-row' + (row.done ? ' is-done' : '');
+  tr.id = `r-${cid}-${i}`;
+  tr.innerHTML = `
+    <td class="chk"><input type="checkbox" ${row.done?'checked':''} onchange="onDone('${cid}',${i},this.checked)"></td>
+    <td><input class="inp-label" type="text" value="${esc(row.label)}" placeholder="Description…" oninput="onF('${cid}',${i},'label',this.value)"></td>
+    <td>
+      <select class="sel-method" onchange="onMethod('${cid}',${i},this.value)">
+        <option value="total" ${isTot?'selected':''}>Total Only</option>
+        <option value="labor-material" ${isLM?'selected':''}>Labor + Material</option>
+        <option value="per-sqft" ${isPSF?'selected':''}>Per SqFt</option>
+      </select>
+    </td>
+    <td><input class="inp-num" type="number" min="0" value="${row.qty}" placeholder="${isPSF?'SqFt':'Qty'}" ${disableQty?'disabled':''} oninput="onF('${cid}',${i},'qty',this.value)"></td>
+    <td><input class="inp-num${row.aiHit?' ai-hit':''}" type="number" min="0" value="${row.labor}" placeholder="${laborPH}" oninput="onF('${cid}',${i},'labor',this.value)"></td>
+    <td><input class="inp-num${row.aiHit?' ai-hit':''}" type="number" min="0" value="${row.material}" placeholder="0.00" ${disableMat?'disabled':''} oninput="onF('${cid}',${i},'material',this.value)"></td>
+    <td class="cell-total" id="ct-${cid}-${i}">$0.00</td>
+    <td><button class="del-btn" title="Remove" onclick="delRow('${cid}',${i})">✕</button></td>
+  `;
+  return tr;
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+// ============================================================
+// EVENTS
+// ============================================================
+function onDone(cid, i, v) {
+  state[cid].rows[i].done = v;
+  const tr = document.getElementById(`r-${cid}-${i}`);
+  if (tr) v ? tr.classList.add('is-done') : tr.classList.remove('is-done');
+  recalcAll(); persist();
+}
+function onF(cid, i, field, val) {
+  state[cid].rows[i][field] = val;
+  updateRowTotal(cid, i);
+  updateCatTotal(cid);
+  updateGrand();
+  persist();
+}
+function onMethod(cid, i, val) {
+  state[cid].rows[i].method = val;
+  renderRows(cid);
+  recalcAll(); persist();
+}
+function addRow(cid) {
+  state[cid].rows.push({label:'',method:'total',qty:'',labor:'',material:'',done:false,aiHit:false});
+  renderRows(cid);
+  recalcAll(); persist();
+  // Guard: panel may not be in DOM if we're on a different step
+  const tbody = document.getElementById('tbody-'+cid);
+  if (tbody) {
+    const last = tbody.lastElementChild;
+    if (last) { const inp = last.querySelector('.inp-label'); if(inp) inp.focus(); }
+  }
+}
+function delRow(cid, i) {
+  state[cid].rows.splice(i,1);
+  renderRows(cid);
+  recalcAll(); persist();
+}
+
+// ============================================================
+// CALC
+// ============================================================
+function rowTotal(row) {
+  const q = parseFloat(row.qty)||0;
+  const l = parseFloat(row.labor)||0;
+  const m = parseFloat(row.material)||0;
+  if (row.method==='total') return l;
+  if (row.method==='labor-material') return (q||1)*(l+m);
+  if (row.method==='per-sqft') return q*(l+m);
+  return 0;
+}
+function updateRowTotal(cid, i) {
+  const t = rowTotal(state[cid].rows[i]);
+  const cell = document.getElementById(`ct-${cid}-${i}`);
+  if (cell) { cell.innerText = fmt(t); t>0 ? cell.classList.add('has-val') : cell.classList.remove('has-val'); }
+}
+function updateCatTotal(cid) {
+  let sum = 0;
+  state[cid].rows.forEach((_,i) => { updateRowTotal(cid,i); sum += rowTotal(state[cid].rows[i]); });
+  const s = document.getElementById('sub-'+cid); if(s) s.innerText = fmt(sum);
+  const t = document.getElementById('tpsub-'+cid); if(t) t.innerText = sum>0 ? fmt(sum,0) : '';
+}
+function updateGrand() {
+  let grand=0, extSum=0, intSum=0, done=0;
+  CATS.forEach(c => {
+    state[c.id].rows.forEach(r => {
+      const t = rowTotal(r);
+      grand += t;
+      if (EXTERIOR_CATS.includes(c.id)) extSum += t; else intSum += t;
+      if (r.done) done++;
+    });
+  });
+  document.getElementById('grandTotal').innerText = fmt(grand);
+  document.getElementById('doneCount').innerText = done;
+  const extEl = document.getElementById('extTotal'); if(extEl) extEl.innerText = fmt(extSum);
+  const intEl = document.getElementById('intTotal'); if(intEl) intEl.innerText = fmt(intSum);
+  // Step nav subtotals
+  const es = document.getElementById('step-sub-ext'); if(es) es.innerText = extSum>0 ? fmt(extSum,0) : '';
+  const is = document.getElementById('step-sub-int'); if(is) is.innerText = intSum>0 ? fmt(intSum,0) : '';
+  const gs = document.getElementById('step-sub-res'); if(gs) gs.innerText = grand>0 ? fmt(grand,0) : '';
+}
+function recalcAll() { CATS.forEach(c => updateCatTotal(c.id)); updateGrand(); }
+function fmt(n, d=2) { return '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+// ============================================================
+// RESET / TITLE
+// ============================================================
+function doReset() {
+  if (!confirm('Reset all data to defaults?')) return;
+  localStorage.removeItem(STORE);
+  localStorage.removeItem('reia_title');
+  state = {};
+  loadState();
+  // Rebuild panels for current step so all rows are fresh in the DOM
+  buildTabsForStep(currentStep);
+  buildPanelsForStep(currentStep);
+  renderAll();
+  recalcAll();
+  document.getElementById('reportTitle').value = '';
+}
+function loadTitle() {
+  document.getElementById('reportTitle').value = localStorage.getItem('reia_title')||'';
+  document.getElementById('reportTitle').oninput = function() { localStorage.setItem('reia_title', this.value); };
+}
+
+// ============================================================
+// AI AUTO-FILL
+// ============================================================
+async function doAIFill() {
+  // Rate limit: prevent spamming the AI endpoint (30s cooldown)
+  const now = Date.now();
+  const lastCall = parseInt(localStorage.getItem('ai_last_call') || '0');
+  const cooldown = 30000; // 30 seconds
+  if (now - lastCall < cooldown) {
+    const secs = Math.ceil((cooldown - (now - lastCall)) / 1000);
+    aiStatus('error', `⚠ Please wait ${secs} more second${secs===1?'':'s'} before fetching prices again.`);
+    return;
+  }
+  localStorage.setItem('ai_last_call', now);
+
+  const btn = document.getElementById('aiBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin" style="border-color:#fff;border-top-color:transparent"></span> Fetching…';
+  aiStatus('loading', 'Asking AI for current Utah market pricing… this may take a few seconds.');
+
+  const items = [];
+  CATS.forEach(cat => {
+    state[cat.id].rows.forEach(row => {
+      if (row.label) items.push({ cat: cat.label, label: row.label, method: row.method });
+    });
+  });
+
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Server error'); }
+    const data = await res.json();
+    if (!data.prices) throw new Error('No prices returned');
+
+    let count = 0;
+    CATS.forEach(cat => {
+      state[cat.id].rows.forEach((row, i) => {
+        const key = `${cat.label}|${row.label}`;
+        const p = data.prices[key];
+        if (p) {
+          if (typeof p.labor === 'number') state[cat.id].rows[i].labor = p.labor.toFixed(2);
+          if (typeof p.material === 'number' && row.method !== 'total') state[cat.id].rows[i].material = p.material.toFixed(2);
+          state[cat.id].rows[i].aiHit = true;
+          count++;
+        }
+      });
+    });
+
+    renderAll(); recalcAll(); persistNow();
+    aiStatus('success', `✓ AI filled ${count} line items with current Utah market prices (2024-2025). Blue-highlighted fields were AI-estimated — review and adjust as needed.`);
+  } catch(e) {
+    aiStatus('error', '⚠ Error: ' + e.message);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>✦</span> AI Auto-Fill Prices';
+}
+
+// ============================================================
+// EXCEL EXPORT
+// ============================================================
+function exportExcel() {
+  const wb = XLSX.utils.book_new();
+  const title = document.getElementById('reportTitle').value || 'Rehab Estimate';
+
+  // --- SUMMARY SHEET ---
+  const summaryRows = [
+    ['Utah REIA – Rehab Estimator'],
+    ['Report:', title],
+    ['Date:', new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })],
+    [],
+    ['CATEGORY', 'SUBTOTAL']
+  ];
+  let grandTotal = 0;
+  CATS.forEach(cat => {
+    let sub = 0;
+    state[cat.id].rows.forEach(row => sub += rowTotal(row));
+    if (sub > 0) {
+      summaryRows.push([cat.label, sub]);
+      grandTotal += sub;
+    }
+  });
+  summaryRows.push([]);
+  summaryRows.push(['GRAND TOTAL', grandTotal]);
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  // Column widths
+  wsSummary['!cols'] = [{ wch: 28 }, { wch: 16 }];
+  // Style grand total row bold (basic)
+  const lastRow = summaryRows.length;
+  wsSummary['!merges'] = [];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+  // --- ONE SHEET PER CATEGORY (with data) ---
+  CATS.forEach(cat => {
+    const rows = state[cat.id].rows;
+    const hasData = rows.some(r => r.label || parseFloat(r.labor) || parseFloat(r.material));
+    if (!hasData) return;
+
+    const sheetRows = [
+      [cat.label.toUpperCase()],
+      [],
+      ['Done', 'Description', 'Calc Method', 'Qty / SqFt', 'Labor ($)', 'Material ($)', 'Total ($)']
+    ];
+
+    let catTotal = 0;
+    rows.forEach(row => {
+      if (!row.label && !row.labor && !row.material) return;
+      const tot = rowTotal(row);
+      catTotal += tot;
+      sheetRows.push([
+        row.done ? 'Yes' : 'No',
+        row.label || '',
+        row.method === 'total' ? 'Total Only' : row.method === 'labor-material' ? 'Labor + Material' : 'Per SqFt',
+        parseFloat(row.qty) || '',
+        parseFloat(row.labor) || '',
+        row.method !== 'total' ? (parseFloat(row.material) || '') : '',
+        tot || ''
+      ]);
+    });
+
+    sheetRows.push([]);
+    sheetRows.push(['', '', '', '', '', 'SUBTOTAL:', catTotal]);
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+    ws['!cols'] = [
+      { wch: 6 }, { wch: 28 }, { wch: 18 }, { wch: 12 },
+      { wch: 12 }, { wch: 14 }, { wch: 14 }
+    ];
+    // Shorten sheet name to 31 chars (Excel limit) and deduplicate
+    let sheetName = cat.label.substring(0, 28);
+    let nameAttempt = sheetName, suffix = 2;
+    while (wb.SheetNames.includes(nameAttempt)) { nameAttempt = sheetName + '_' + suffix++; }
+    XLSX.utils.book_append_sheet(wb, ws, nameAttempt);
+  });
+
+  // Download
+  const safeTitle = title.replace(/[^a-z0-9]/gi, '_').substring(0, 40) || 'Rehab_Estimate';
+  XLSX.writeFile(wb, `${safeTitle}.xlsx`);
+}
+
+let _aiStatusTimer = null;
+
+// ============================================================
+// PRINT — opens isolated popup so GHL funnel doesn't print
+// ============================================================
+function printCalculator() {
+  const title = document.getElementById('reportTitle').value || 'Rehab Estimate';
+  const reportDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+  // Collect all category data
+  let allSectionsHTML = '';
+  let grandTotal = 0;
+  let extTotal = 0;
+  let intTotal = 0;
+
+  CATS.forEach(cat => {
+    const rows = state[cat.id].rows.filter(r => r.label || parseFloat(r.labor) || parseFloat(r.material));
+    if (rows.length === 0) return;
+
+    let catTotal = 0;
+    let rowsHTML = rows.map(row => {
+      const tot = rowTotal(row);
+      catTotal += tot;
+      const isExt = EXTERIOR_CATS.includes(cat.id);
+      return `<tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:7px 10px;">${row.done ? '✓' : ''}</td>
+        <td style="padding:7px 10px;font-weight:${row.done?'400':'500'};color:${row.done?'#94a3b8':'#0f2340'}">${row.label || ''}</td>
+        <td style="padding:7px 10px;color:#64748b;font-size:0.8rem;">${row.method === 'total' ? 'Total' : row.method === 'labor-material' ? 'Labor+Mat' : 'Per SqFt'}</td>
+        <td style="padding:7px 10px;text-align:right;font-family:monospace;">${parseFloat(row.labor) ? '$'+parseFloat(row.labor).toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+        <td style="padding:7px 10px;text-align:right;font-family:monospace;">${row.method !== 'total' && parseFloat(row.material) ? '$'+parseFloat(row.material).toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+        <td style="padding:7px 10px;text-align:right;font-weight:700;font-family:monospace;color:${tot>0?'#1a7a4a':'#94a3b8'}">${tot>0?'$'+tot.toLocaleString('en-US',{minimumFractionDigits:2}):'-'}</td>
+      </tr>`;
+    }).join('');
+
+    grandTotal += catTotal;
+    if (EXTERIOR_CATS.includes(cat.id)) extTotal += catTotal;
+    else intTotal += catTotal;
+
+    const sectionType = EXTERIOR_CATS.includes(cat.id) ? 'Exterior' : 'Interior';
+    const badgeColor = EXTERIOR_CATS.includes(cat.id) ? '#fef3c7;color:#92400e' : '#dbeafe;color:#1e40af';
+
+    allSectionsHTML += `
+      <div style="margin-bottom:20px;break-inside:avoid;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+          <h3 style="margin:0;font-size:0.9rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#0f2340;">${cat.label}</h3>
+          <span style="font-size:0.68rem;padding:2px 8px;border-radius:20px;font-weight:600;background:${badgeColor}">${sectionType}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          <thead>
+            <tr style="background:#f1f5f9;border-bottom:2px solid #e2e8f0;">
+              <th style="padding:7px 10px;text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;width:30px;">✓</th>
+              <th style="padding:7px 10px;text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Description</th>
+              <th style="padding:7px 10px;text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Method</th>
+              <th style="padding:7px 10px;text-align:right;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Labor</th>
+              <th style="padding:7px 10px;text-align:right;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Material</th>
+              <th style="padding:7px 10px;text-align:right;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Total</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHTML}</tbody>
+          <tfoot>
+            <tr style="background:#f8fafc;border-top:2px solid #e2e8f0;">
+              <td colspan="5" style="padding:8px 10px;font-weight:700;font-size:0.8rem;color:#475569;">Subtotal</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:800;font-family:monospace;color:#1a7a4a;">$${catTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
+  });
+
+  const fmtMoney = n => '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  const printHTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title} – Utah REIA Rehab Estimate</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; color: #0f2340; background: white; padding: 24px; font-size: 14px; }
+    @media print {
+      body { padding: 12px; }
+      @page { margin: 1cm; size: A4; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #0f2340;">
+    <div>
+      <img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" style="height:40px;margin-bottom:8px;display:block;" alt="Utah REIA">
+      <h1 style="font-size:1.3rem;font-weight:800;color:#0f2340;margin-bottom:2px;">${title}</h1>
+      <p style="font-size:0.8rem;color:#64748b;">Generated: ${reportDate}</p>
+    </div>
+    <div style="text-align:right;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 20px;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#65a30d;">Grand Total</div>
+      <div style="font-size:1.8rem;font-weight:800;color:#14532d;font-variant-numeric:tabular-nums;">$${grandTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+    </div>
+  </div>
+
+  <!-- Summary Row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#94a3b8;margin-bottom:4px;">Exterior Total</div>
+      <div style="font-size:1.1rem;font-weight:800;color:#0f2340;">${fmtMoney(extTotal)}</div>
+    </div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#94a3b8;margin-bottom:4px;">Interior Total</div>
+      <div style="font-size:1.1rem;font-weight:800;color:#0f2340;">${fmtMoney(intTotal)}</div>
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#65a30d;margin-bottom:4px;">Grand Total</div>
+      <div style="font-size:1.1rem;font-weight:800;color:#14532d;">${fmtMoney(grandTotal)}</div>
+    </div>
+  </div>
+
+  <!-- All Categories -->
+  ${allSectionsHTML}
+
+  <!-- Footer -->
+  <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;text-align:center;font-size:0.72rem;color:#94a3b8;">
+    Utah REIA Repair Estimator · ${reportDate} · All figures are estimates only
+  </div>
+</body>
+</html>`;
+
+  // Open isolated print window — completely separate from GHL funnel
+  const printWin = window.open('', '_blank', 'width=900,height=700,scrollbars=yes');
+  if (!printWin) {
+    alert('Pop-up blocked! Please allow pop-ups for this page and try again.');
+    return;
+  }
+  printWin.document.write(printHTML);
+  printWin.document.close();
+  // Wait for logo image to load before printing
+  printWin.onload = () => {
+    setTimeout(() => {
+      printWin.focus();
+      printWin.print();
+      printWin.onafterprint = () => printWin.close();
+    }, 400);
+  };
+}
+
+function aiStatus(type, msg) {
+  const bar = document.getElementById('aiStatusBar');
+  // Cancel any pending hide timer so new messages aren't immediately hidden
+  if (_aiStatusTimer) { clearTimeout(_aiStatusTimer); _aiStatusTimer = null; }
+  bar.className = type;
+  bar.style.display = 'flex';
+  document.getElementById('aiStatusTxt').innerText = msg;
+  if (type !== 'loading') {
+    _aiStatusTimer = setTimeout(() => {
+      bar.style.display = 'none';
+      bar.className = '';
+      _aiStatusTimer = null;
+    }, 9000);
+  }
+}
+</script>
+</body>
+</html>
