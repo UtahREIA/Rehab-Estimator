@@ -1,25 +1,22 @@
-import { kv } from "@vercel/kv";
-
 export default async function handler(req, res) {
 
   // ── CORS — headers MUST be set before any other response ────────────────
-
   const origin = req.headers.origin || "";
-  // Allow all origins starting with https://app.gohighlevel.com and https://utahreia.org
   const isAllowed = (
+    !origin ||
     origin.startsWith("https://app.gohighlevel.com") ||
-    origin === "https://utahreia.org"
+    origin.startsWith("https://utahreia.org") ||
+    origin.startsWith("http://localhost") ||
+    origin.startsWith("http://127.0.0.1")
   );
-  res.setHeader("Access-Control-Allow-Origin", isAllowed ? origin : "null");
+  res.setHeader("Access-Control-Allow-Origin", isAllowed ? (origin || "*") : "null");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age", "86400"); // cache preflight 24hrs
+  res.setHeader("Access-Control-Max-Age", "86400");
 
-  // Handle preflight — must respond 200 with headers, never block
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // Block non-allowed origins AFTER preflight is handled
   if (!isAllowed) {
     console.warn(`[CORS BLOCKED] Origin: ${origin}`);
     return res.status(403).json({ valid: false, message: "Forbidden origin." });
@@ -32,27 +29,24 @@ export default async function handler(req, res) {
     req.socket?.remoteAddress ||
     "unknown";
 
-  // ── RATE LIMITING (per IP using Vercel KV) ───────────────────────────────
+  // ── IN-MEMORY RATE LIMITING (no external dependency needed) ──────────────
   // Max 10 attempts per IP per 15 minutes
-  try {
-    const rateLimitKey = `rl:verify:${ip}`;
-    const attempts = await kv.incr(rateLimitKey);
-    if (attempts === 1) {
-      // First attempt — set 15 minute expiry
-      await kv.expire(rateLimitKey, 900);
-    }
-    if (attempts > 10) {
-      const ttl = await kv.ttl(rateLimitKey);
-      const mins = Math.ceil(ttl / 60);
-      console.warn(`[RATE LIMIT] IP ${ip} exceeded verify-phone limit. Attempts: ${attempts}`);
-      return res.status(429).json({
-        valid: false,
-        message: `Too many attempts. Please try again in ${mins} minute${mins === 1 ? "" : "s"}.`
-      });
-    }
-  } catch (kvErr) {
-    // If KV is unavailable, log but don't block — degrade gracefully
-    console.error("[KV ERROR] Rate limit check failed:", kvErr.message);
+  if (!global._verifyRateMap) global._verifyRateMap = new Map();
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const maxAttempts = 10;
+  const record = global._verifyRateMap.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
+  record.count++;
+  global._verifyRateMap.set(ip, record);
+
+  if (record.count > maxAttempts) {
+    const minsLeft = Math.ceil((record.resetAt - now) / 60000);
+    console.warn(`[RATE LIMIT] IP ${ip} exceeded verify-phone limit. Attempts: ${record.count}`);
+    return res.status(429).json({
+      valid: false,
+      message: `Too many attempts. Please try again in ${minsLeft} minute${minsLeft === 1 ? "" : "s"}.`
+    });
   }
 
   const { phone, captcha } = req.body;
@@ -85,7 +79,7 @@ export default async function handler(req, res) {
     });
     const recaptchaData = await recaptchaRes.json();
     if (!recaptchaData.success) {
-      console.warn(`[CAPTCHA FAIL] IP: ${ip}, Phone: ${cleanPhone.slice(0,6)}****`);
+      console.warn(`[CAPTCHA FAIL] IP: ${ip}, Phone: ${cleanPhone.slice(0, 6)}****`);
       return res.status(400).json({ valid: false, message: "CAPTCHA verification failed. Please try again." });
     }
   } catch (err) {
@@ -102,20 +96,16 @@ export default async function handler(req, res) {
   const isValid = allowedPhones.length === 0 || allowedPhones.includes(cleanPhone);
 
   // ── ACCESS LOGGING ────────────────────────────────────────────────────────
-  const logEntry = {
+  console.log("[ACCESS LOG]", JSON.stringify({
     time: new Date().toISOString(),
     ip,
-    phone: cleanPhone.slice(0, 6) + "****", // mask last 4 digits in logs
+    phone: cleanPhone.slice(0, 6) + "****",
     result: isValid ? "GRANTED" : "DENIED",
-    captcha: "passed",
     userAgent: req.headers["user-agent"]?.substring(0, 80) || "unknown"
-  };
-  console.log("[ACCESS LOG]", JSON.stringify(logEntry));
+  }));
 
-  // ── SESSION TOKEN WITH EXPIRY ─────────────────────────────────────────────
+  // ── RESPOND ───────────────────────────────────────────────────────────────
   if (isValid) {
-    // Issue a signed session token with 30-day expiry
-    // Client stores this; on reload we check it hasn't expired
     const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 days
     return res.status(200).json({
       valid: true,
