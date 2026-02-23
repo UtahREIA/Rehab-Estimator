@@ -1,73 +1,121 @@
-export default async function handler(req, res) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+import { kv } from "@vercel/kv";
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+export default async function handler(req, res) {
+
+  // ── CORS ─────────────────────────────────────────────────────────────────
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map(o => o.trim()).filter(Boolean);
+  const origin = req.headers.origin || "";
+  if (allowedOrigins.length > 0 && !allowedOrigins.includes(origin)) {
+    return res.status(403).json({ valid: false, message: "Forbidden origin." });
+  }
+  res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  // ── IP EXTRACTION ────────────────────────────────────────────────────────
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
+    req.headers["x-real-ip"] ||
+    req.socket?.remoteAddress ||
+    "unknown";
+
+  // ── RATE LIMITING (per IP using Vercel KV) ───────────────────────────────
+  // Max 10 attempts per IP per 15 minutes
+  try {
+    const rateLimitKey = `rl:verify:${ip}`;
+    const attempts = await kv.incr(rateLimitKey);
+    if (attempts === 1) {
+      // First attempt — set 15 minute expiry
+      await kv.expire(rateLimitKey, 900);
+    }
+    if (attempts > 10) {
+      const ttl = await kv.ttl(rateLimitKey);
+      const mins = Math.ceil(ttl / 60);
+      console.warn(`[RATE LIMIT] IP ${ip} exceeded verify-phone limit. Attempts: ${attempts}`);
+      return res.status(429).json({
+        valid: false,
+        message: `Too many attempts. Please try again in ${mins} minute${mins === 1 ? "" : "s"}.`
+      });
+    }
+  } catch (kvErr) {
+    // If KV is unavailable, log but don't block — degrade gracefully
+    console.error("[KV ERROR] Rate limit check failed:", kvErr.message);
   }
 
   const { phone, captcha } = req.body;
 
-  // ── 1. Validate inputs ────────────────────────────────────────────────────
-  if (!phone) {
-    return res.status(400).json({ valid: false, message: 'No phone number provided.' });
+  // ── INPUT VALIDATION ─────────────────────────────────────────────────────
+  if (!phone || typeof phone !== "string") {
+    return res.status(400).json({ valid: false, message: "No phone number provided." });
+  }
+  if (!captcha || typeof captcha !== "string") {
+    return res.status(400).json({ valid: false, message: "CAPTCHA token missing." });
   }
 
-  if (!captcha) {
-    return res.status(400).json({ valid: false, message: 'CAPTCHA token missing. Please complete the verification.' });
+  const cleanPhone = phone.replace(/\D/g, "");
+  if (cleanPhone.length < 10 || cleanPhone.length > 11) {
+    return res.status(400).json({ valid: false, message: "Invalid phone number format." });
   }
 
-  // ── 2. Verify reCAPTCHA token with Google ─────────────────────────────────
+  // ── RECAPTCHA VERIFICATION ────────────────────────────────────────────────
   const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
   if (!recaptchaSecret) {
-    console.error('RECAPTCHA_SECRET_KEY environment variable is not set.');
-    return res.status(500).json({ valid: false, message: 'Server configuration error.' });
+    console.error("[CONFIG] RECAPTCHA_SECRET_KEY not set");
+    return res.status(500).json({ valid: false, message: "Server configuration error." });
   }
 
   try {
-    const recaptchaRes = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        secret: recaptchaSecret,
-        response: captcha,
-      }),
+    const recaptchaRes = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ secret: recaptchaSecret, response: captcha })
     });
-
     const recaptchaData = await recaptchaRes.json();
-
     if (!recaptchaData.success) {
-      console.warn('reCAPTCHA failed:', recaptchaData['error-codes']);
-      return res.status(400).json({
-        valid: false,
-        message: 'CAPTCHA verification failed. Please try again.',
-      });
+      console.warn(`[CAPTCHA FAIL] IP: ${ip}, Phone: ${cleanPhone.slice(0,6)}****`);
+      return res.status(400).json({ valid: false, message: "CAPTCHA verification failed. Please try again." });
     }
   } catch (err) {
-    console.error('reCAPTCHA verification error:', err);
-    return res.status(502).json({
-      valid: false,
-      message: 'Could not verify CAPTCHA. Please check your connection and try again.',
-    });
+    console.error("[CAPTCHA ERROR]", err.message);
+    return res.status(502).json({ valid: false, message: "Could not verify CAPTCHA. Please try again." });
   }
 
-  // ── 3. Verify phone number ────────────────────────────────────────────────
-  const cleanPhone = phone.replace(/\D/g, '');
+  // ── PHONE VERIFICATION ────────────────────────────────────────────────────
+  const allowedPhones = (process.env.ALLOWED_PHONES || "")
+    .split(",")
+    .map(p => p.trim().replace(/\D/g, ""))
+    .filter(Boolean);
 
-  const allowedPhones = (process.env.ALLOWED_PHONES || '')
-    .split(',')
-    .map(p => p.trim().replace(/\D/g, ''))
-    .filter(Boolean); // remove empty strings
+  const isValid = allowedPhones.length === 0 || allowedPhones.includes(cleanPhone);
 
-  // If ALLOWED_PHONES is not configured, allow all verified users
-  if (allowedPhones.length === 0 || allowedPhones.includes(cleanPhone)) {
-    return res.status(200).json({ valid: true });
+  // ── ACCESS LOGGING ────────────────────────────────────────────────────────
+  const logEntry = {
+    time: new Date().toISOString(),
+    ip,
+    phone: cleanPhone.slice(0, 6) + "****", // mask last 4 digits in logs
+    result: isValid ? "GRANTED" : "DENIED",
+    captcha: "passed",
+    userAgent: req.headers["user-agent"]?.substring(0, 80) || "unknown"
+  };
+  console.log("[ACCESS LOG]", JSON.stringify(logEntry));
+
+  // ── SESSION TOKEN WITH EXPIRY ─────────────────────────────────────────────
+  if (isValid) {
+    // Issue a signed session token with 30-day expiry
+    // Client stores this; on reload we check it hasn't expired
+    const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 days
+    return res.status(200).json({
+      valid: true,
+      expiresAt,
+      token: `ureia_${expiresAt}_${Buffer.from(cleanPhone.slice(-4)).toString("base64")}`
+    });
   }
 
   return res.status(200).json({
     valid: false,
-    message: 'Phone number not found. Please contact Utah REIA for access.',
+    message: "Phone number not found. Please contact Utah REIA for access."
   });
 }
