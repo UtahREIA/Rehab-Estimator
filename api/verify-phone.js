@@ -5,13 +5,11 @@ export default async function handler(req, res) {
   // ── CORS — headers MUST be set before any other response ────────────────
 
   const origin = req.headers.origin || "";
-  const allowedOrigins = [
-    "https://app.gohighlevel.com",
-    "https://utahreia.org"
-  ];
-
-  // Always set CORS headers first (required for preflight OPTIONS to work)
-  const isAllowed = allowedOrigins.includes(origin);
+  // Allow all origins starting with https://app.gohighlevel.com and https://utahreia.org
+  const isAllowed = (
+    origin.startsWith("https://app.gohighlevel.com") ||
+    origin === "https://utahreia.org"
+  );
   res.setHeader("Access-Control-Allow-Origin", isAllowed ? origin : "null");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
