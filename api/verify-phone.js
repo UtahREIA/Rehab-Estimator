@@ -1,26 +1,9 @@
 export default async function handler(req, res) {
 
-  // ── CORS — headers MUST be set before any other response ────────────────
-  const origin = req.headers.origin || "";
-  const isAllowed = (
-    !origin ||
-    origin.startsWith("https://app.gohighlevel.com") ||
-    origin.startsWith("https://utahreia.org") ||
-    origin.startsWith("http://localhost") ||
-    origin.startsWith("http://127.0.0.1")
-  );
-  res.setHeader("Access-Control-Allow-Origin", isAllowed ? (origin || "*") : "null");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age", "86400");
+  // CORS is handled entirely by vercel.json — no manual headers needed here
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-  if (!isAllowed) {
-    console.warn(`[CORS BLOCKED] Origin: ${origin}`);
-    return res.status(403).json({ valid: false, message: "Forbidden origin." });
-  }
 
   // ── IP EXTRACTION ────────────────────────────────────────────────────────
   const ip =
@@ -29,20 +12,19 @@ export default async function handler(req, res) {
     req.socket?.remoteAddress ||
     "unknown";
 
-  // ── IN-MEMORY RATE LIMITING (no external dependency needed) ──────────────
+  // ── IN-MEMORY RATE LIMITING ───────────────────────────────────────────────
   // Max 10 attempts per IP per 15 minutes
   if (!global._verifyRateMap) global._verifyRateMap = new Map();
   const now = Date.now();
-  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const windowMs = 15 * 60 * 1000;
   const maxAttempts = 10;
   const record = global._verifyRateMap.get(ip) || { count: 0, resetAt: now + windowMs };
   if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
   record.count++;
   global._verifyRateMap.set(ip, record);
-
   if (record.count > maxAttempts) {
     const minsLeft = Math.ceil((record.resetAt - now) / 60000);
-    console.warn(`[RATE LIMIT] IP ${ip} exceeded verify-phone limit. Attempts: ${record.count}`);
+    console.warn(`[RATE LIMIT] IP ${ip} — attempts: ${record.count}`);
     return res.status(429).json({
       valid: false,
       message: `Too many attempts. Please try again in ${minsLeft} minute${minsLeft === 1 ? "" : "s"}.`
@@ -58,7 +40,6 @@ export default async function handler(req, res) {
   if (!captcha || typeof captcha !== "string") {
     return res.status(400).json({ valid: false, message: "CAPTCHA token missing." });
   }
-
   const cleanPhone = phone.replace(/\D/g, "");
   if (cleanPhone.length < 10 || cleanPhone.length > 11) {
     return res.status(400).json({ valid: false, message: "Invalid phone number format." });
@@ -70,7 +51,6 @@ export default async function handler(req, res) {
     console.error("[CONFIG] RECAPTCHA_SECRET_KEY not set");
     return res.status(500).json({ valid: false, message: "Server configuration error." });
   }
-
   try {
     const recaptchaRes = await fetch("https://www.google.com/recaptcha/api/siteverify", {
       method: "POST",
@@ -89,13 +69,10 @@ export default async function handler(req, res) {
 
   // ── PHONE VERIFICATION ────────────────────────────────────────────────────
   const allowedPhones = (process.env.ALLOWED_PHONES || "")
-    .split(",")
-    .map(p => p.trim().replace(/\D/g, ""))
-    .filter(Boolean);
-
+    .split(",").map(p => p.trim().replace(/\D/g, "")).filter(Boolean);
   const isValid = allowedPhones.length === 0 || allowedPhones.includes(cleanPhone);
 
-  // ── ACCESS LOGGING ────────────────────────────────────────────────────────
+  // ── ACCESS LOG ────────────────────────────────────────────────────────────
   console.log("[ACCESS LOG]", JSON.stringify({
     time: new Date().toISOString(),
     ip,
@@ -104,9 +81,8 @@ export default async function handler(req, res) {
     userAgent: req.headers["user-agent"]?.substring(0, 80) || "unknown"
   }));
 
-  // ── RESPOND ───────────────────────────────────────────────────────────────
   if (isValid) {
-    const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 days
+    const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
     return res.status(200).json({
       valid: true,
       expiresAt,
