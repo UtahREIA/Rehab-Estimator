@@ -3,14 +3,13 @@ import { kv } from "@vercel/kv";
 export default async function handler(req, res) {
 
   // ── CORS — headers MUST be set before any other response ────────────────
-
   const origin = req.headers.origin || "";
-  // Allow all origins starting with https://app.gohighlevel.com and https://utahreia.org
-  const isAllowed = (
-    origin.startsWith("https://app.gohighlevel.com") ||
-    origin === "https://utahreia.org"
-  );
-  res.setHeader("Access-Control-Allow-Origin", isAllowed ? origin : "null");
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+    .split(",").map(o => o.trim()).filter(Boolean);
+
+  // Always set CORS headers first (required for preflight OPTIONS to work)
+  const isAllowed = allowedOrigins.length === 0 || allowedOrigins.includes(origin);
+  res.setHeader("Access-Control-Allow-Origin", isAllowed ? (origin || "*") : "null");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Access-Control-Max-Age", "86400"); // cache preflight 24hrs
