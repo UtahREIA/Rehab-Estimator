@@ -1,9 +1,41 @@
 export default async function handler(req, res) {
 
-  // CORS is handled entirely by vercel.json — no manual headers needed here
+// ── ALLOWED ORIGINS ──────────────────────────────────────────────────────────
+// Add any domain that should be allowed to call this API
+const ALLOWED_ORIGINS = [
+  "https://utahreia.org",
+  "https://www.utahreia.org",
+  "https://app.gohighlevel.com",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://localhost:3000"
+];
 
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin"); // tells CDN not to cache for wrong origin
+  }
+  // If origin not in list, we set nothing — browser will block the request
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
+}
+
+  // Always set CORS headers first, before anything else
+  setCorsHeaders(req, res);
+
+  // Handle preflight
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  // Block requests from non-allowed origins at the application level too
+  const origin = req.headers.origin || "";
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    console.warn(`[ORIGIN BLOCKED] ${origin}`);
+    return res.status(403).json({ error: "Access denied." });
+  }
 
   // ── IP EXTRACTION ─────────────────────────────────────────────────────────
   const ip =
@@ -50,6 +82,7 @@ export default async function handler(req, res) {
   console.log("[AI REQUEST]", JSON.stringify({
     time: new Date().toISOString(),
     ip,
+    origin,
     itemCount: cleanItems.length,
     userAgent: req.headers["user-agent"]?.substring(0, 80) || "unknown"
   }));
@@ -110,7 +143,11 @@ ${cleanItems.map(it => `${it.cat}|${it.label} [${it.method}]`).join("\n")}`;
 
     if (!parsed.prices) return res.status(502).json({ error: "AI returned unexpected format." });
 
-    console.log("[AI SUCCESS]", JSON.stringify({ time: new Date().toISOString(), ip, pricesReturned: Object.keys(parsed.prices).length }));
+    console.log("[AI SUCCESS]", JSON.stringify({
+      time: new Date().toISOString(),
+      ip,
+      pricesReturned: Object.keys(parsed.prices).length
+    }));
     return res.status(200).json({ prices: parsed.prices });
 
   } catch (err) {
