@@ -63,13 +63,17 @@
   .btn-danger{color:var(--red);border-color:#fecaca;}
   .btn-danger:hover{background:var(--red-bg);border-color:var(--red);}
 
+
   /* TAB BAR */
   .tab-bar-wrap{background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:stretch;position:relative;}
-  .tab-scroll-btn{flex-shrink:0;width:36px;display:flex;align-items:center;justify-content:center;background:#fff;border:none;cursor:pointer;color:var(--slate);font-size:1rem;z-index:2;transition:background .15s,color .15s;}
-  .tab-scroll-btn:hover{background:var(--bg);color:var(--navy);}
-  .tab-scroll-btn.hidden{opacity:0;pointer-events:none;}
+  /* Right fade — fades out to hint more content, hides when scrolled to end */
+  .tab-bar-wrap::after{content:'';position:absolute;right:0;top:0;bottom:1px;width:64px;background:linear-gradient(to right,rgba(255,255,255,0) 0%,#fff 80%);pointer-events:none;z-index:2;transition:opacity .2s;}
+  .tab-bar-wrap.scrolled-end::after{opacity:0;}
+  .tab-scroll-btn{flex-shrink:0;width:32px;display:flex;align-items:center;justify-content:center;background:#fff;border:none;cursor:pointer;color:var(--navy);font-size:1rem;font-weight:900;z-index:4;transition:background .15s;}
+  .tab-scroll-btn:hover{background:var(--bg);}
+  .tab-scroll-btn.hidden{visibility:hidden;pointer-events:none;}
   .tab-scroll-btn.left{border-right:1px solid var(--border);}
-  .tab-scroll-btn.right{border-left:1px solid var(--border);}
+  .tab-scroll-btn.right{border-left:1px solid var(--border);z-index:4;}
   .tab-bar{flex:1;display:flex;overflow-x:auto;padding:0 4px;scrollbar-width:none;scroll-behavior:smooth;}
   .tab-bar::-webkit-scrollbar{display:none;}
   .tab-pill{padding:11px 14px;border:none;background:none;cursor:pointer;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--slate-light);white-space:nowrap;border-bottom:3px solid transparent;font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;gap:1px;}
@@ -583,7 +587,13 @@ function buildTabsForStep(step) {
     bar.appendChild(btn);
   });
 }
-  setTimeout(updateTabScrollBtns, 50);
+  // Re-check arrow visibility after layout paints — use rAF for reliability
+  requestAnimationFrame(() => {
+    updateTabScrollBtns();
+    // Extra deferred checks in case fonts/subtotals affect widths
+    setTimeout(updateTabScrollBtns, 100);
+    setTimeout(updateTabScrollBtns, 400);
+  });
 
 function buildPanelsForStep(step) {
   const area = document.getElementById('panelsArea');
@@ -676,6 +686,7 @@ function initApp() {
   applyStepUI('general');
   loadTitle();
   document.getElementById('tabBar').addEventListener('scroll', updateTabScrollBtns);
+  initTabScrollObserver();
 }
 
 function loadState() {
@@ -1186,18 +1197,40 @@ function aiStatus(type,msg) {
 // ============================================================
 function scrollTabBar(dir) {
   const bar = document.getElementById('tabBar');
-  bar.scrollBy({ left: dir * 200, behavior: 'smooth' });
-  setTimeout(updateTabScrollBtns, 250);
+  bar.scrollBy({ left: dir * 240, behavior: 'smooth' });
+  setTimeout(updateTabScrollBtns, 300);
 }
+
 function updateTabScrollBtns() {
-  const bar = document.getElementById('tabBar');
+  const bar  = document.getElementById('tabBar');
+  const wrap = document.getElementById('tabBarWrap');
   const btnL = document.getElementById('tabScrollLeft');
   const btnR = document.getElementById('tabScrollRight');
-  if (!bar || !btnL || !btnR) return;
-  const canScrollLeft  = bar.scrollLeft > 2;
-  const canScrollRight = bar.scrollLeft < bar.scrollWidth - bar.clientWidth - 2;
+  if (!bar || !btnL || !btnR || !wrap) return;
+
+  const scrollLeft    = Math.round(bar.scrollLeft);
+  const scrollWidth   = bar.scrollWidth;
+  const clientWidth   = bar.clientWidth;
+  const hasOverflow   = scrollWidth > clientWidth + 2;
+  const canScrollLeft = scrollLeft > 2;
+  // Right arrow: show whenever there's overflow AND not yet scrolled to the end
+  const canScrollRight = hasOverflow && scrollLeft < scrollWidth - clientWidth - 2;
+
   btnL.classList.toggle('hidden', !canScrollLeft);
   btnR.classList.toggle('hidden', !canScrollRight);
+
+  // Fade gradient: hide when at the end
+  wrap.classList.toggle('scrolled-end', !canScrollRight);
+}
+
+// Wire up ResizeObserver so arrows re-check when window is resized
+let _tabResizeObserver = null;
+function initTabScrollObserver() {
+  const bar = document.getElementById('tabBar');
+  if (!bar) return;
+  if (_tabResizeObserver) _tabResizeObserver.disconnect();
+  _tabResizeObserver = new ResizeObserver(() => updateTabScrollBtns());
+  _tabResizeObserver.observe(bar);
 }
 // ============================================================
 // GATE
