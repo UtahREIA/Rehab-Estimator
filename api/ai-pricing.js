@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   if (!global._aiRateMap) global._aiRateMap = new Map();
   const now = Date.now();
   const windowMs = 60 * 60 * 1000;
-  const maxCalls = 10; // raised from 5 — batched calls from one session count separately
+  const maxCalls = 10;
   const record = global._aiRateMap.get(ip) || { count: 0, resetAt: now + windowMs };
   if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
   record.count++;
@@ -55,10 +55,14 @@ export default async function handler(req, res) {
   }
 
   const cleanItems = items.map(it => ({
-    cat:   String(it.cat   || "").substring(0, 60).replace(/[^a-zA-Z0-9 &/\-().]/g, ""),
-    label: String(it.label || "").substring(0, 100).replace(/[^a-zA-Z0-9 &/\-().]/g, ""),
-    unit:  String(it.unit  || "LS").substring(0, 20)
+    cat:   String(it.cat   || "").substring(0, 60).replace(/[^a-zA-Z0-9 &/\-.()]/g, ""),
+    label: String(it.label || "").substring(0, 100).replace(/[^a-zA-Z0-9 &/\-.()]/g, ""),
+    unit:  String(it.unit  || "LS").substring(0, 20).replace(/[^a-zA-Z]/g, "")
   })).filter(it => it.cat && it.label);
+
+  if (cleanItems.length === 0) {
+    return res.status(400).json({ error: "No valid items after sanitization." });
+  }
 
   console.log("[AI REQUEST]", JSON.stringify({
     time: new Date().toISOString(), ip,
@@ -66,31 +70,31 @@ export default async function handler(req, res) {
     origin: origin || "unknown"
   }));
 
-  // ── SYSTEM PROMPT ─────────────────────────────────────────────────────────
-  const systemPrompt = `You are a deterministic construction cost database for Utah (Salt Lake City / Utah County market), locked to Q1 2025 rates.
+  // ── BUILD PROMPTS ─────────────────────────────────────────────────────────
+  const systemPrompt =
+    `You are a Utah construction cost estimator (Salt Lake City / Utah County, Q1 2025 rates). ` +
+    `You ONLY output raw JSON — no markdown, no code fences, no explanation, no extra text of any kind. ` +
+    `Your output must start with { and end with } and be valid JSON parseable by JSON.parse().`;
 
-Your only job is to return fixed, consistent mid-range contractor prices. You must return the EXACT SAME prices every time for the same inputs — no variation, no ranges, no rounding differently between calls. Always pick the single mid-point value of the typical Utah contractor range and never deviate from it.
+  const itemLines = cleanItems.map((it, idx) =>
+    `${idx + 1}. key="${it.cat}|${it.label}" unit=${it.unit}`
+  ).join("\n");
 
-Pricing is per unit of measure:
-- SF = Square Foot, LF = Linear Feet, EA = Each, LS = Lump Sum, SQ = Roofing Square (100 sqft), CY = Cubic Yard, HR = Hour, PCT = Percentage`;
+  const userPrompt =
+    `Price each item below for a mid-range Utah contractor. ` +
+    `Return EXACTLY this JSON structure, one entry per item:\n` +
+    `{"prices":{"<key>":{"labor":<number>,"material":<number>,"qty":<number>}}}\n\n` +
+    `Rules:\n` +
+    `- labor: cost of labor per unit (number only, no $ or commas)\n` +
+    `- material: cost of materials per unit (number only, no $ or commas)\n` +
+    `- qty: typical default quantity (e.g. 1200 for SF paint, 1 for EA/LS, 40 for LF gutters)\n` +
+    `- For LS items: labor = full contractor lump sum, material = 0, qty = 1\n` +
+    `- Units: SF=per sqft, LF=per linear ft, EA=per item, LS=lump sum, SQ=per 100sqft, CY=per cubic yard, HR=per hour\n` +
+    `- Use the EXACT key string shown (including the | separator)\n\n` +
+    `Items:\n${itemLines}`;
 
   // ── OPENAI CALL ───────────────────────────────────────────────────────────
-  // Timeout: 55s — Vercel maxDuration is 60s, leaving 5s buffer for overhead
   const OPENAI_TIMEOUT_MS = 55000;
-
-  const userPrompt = `Return ONLY a valid JSON object — no markdown, no explanation, no code fences:
-{"prices":{"Category|Label":{"labor":number,"material":number,"qty":number}}}
-
-Pricing rules:
-- labor = labor cost per unit of measure
-- material = material cost per unit of measure  
-- qty = typical default quantity for this item (e.g. 1200 for SF flooring, 1 for EA items, etc.)
-- Numbers only — no $ signs, no commas, always the same value every call
-- For Lump Sum (LS) items: set qty=1, labor=all-in contractor total, material=0
-
-Items to price (format: Category|Label [UNIT]):
-${cleanItems.map(it => `${it.cat}|${it.label} [${it.unit}]`).join("\n")}`;
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
 
@@ -107,9 +111,12 @@ ${cleanItems.map(it => `${it.cat}|${it.label} [${it.unit}]`).join("\n")}`;
           { role: "system", content: systemPrompt },
           { role: "user",   content: userPrompt   }
         ],
-        max_tokens: 6000,  // raised from 4000 to handle larger batches
+        max_tokens: 6000,
         temperature: 0,
-        seed: 42
+        seed: 42,
+        // response_format json_object forces the model to ONLY output valid JSON —
+        // eliminates markdown fences, preamble text, and all other non-JSON output
+        response_format: { type: "json_object" }
       }),
       signal: controller.signal
     });
@@ -117,38 +124,78 @@ ${cleanItems.map(it => `${it.cat}|${it.label} [${it.unit}]`).join("\n")}`;
     clearTimeout(timeoutId);
 
     if (!openaiRes.ok) {
-      const errData = await openaiRes.json();
-      console.error("[OPENAI ERROR]", errData);
+      const errData = await openaiRes.json().catch(() => ({}));
+      console.error("[OPENAI ERROR]", JSON.stringify(errData));
       return res.status(502).json({ error: "AI service error. Please try again." });
     }
 
     const data = await openaiRes.json();
-    let text = data.choices[0].message.content.trim();
-    text = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    let text = (data?.choices?.[0]?.message?.content || "").trim();
+
+    // Strip any accidental markdown fences (safety net — json_object mode shouldn't produce these)
+    text = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/, "")
+      .trim();
+
+    // If somehow the response doesn't start with {, extract the first JSON block
+    if (!text.startsWith("{")) {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        text = match[0];
+      } else {
+        console.error("[NO JSON FOUND] Raw:", text.substring(0, 300));
+        return res.status(502).json({ error: "AI returned invalid data. Please try again." });
+      }
+    }
 
     let parsed;
     try {
       parsed = JSON.parse(text);
     } catch (e) {
-      console.error("[JSON PARSE ERROR]", text.substring(0, 200));
-      return res.status(502).json({ error: "AI returned invalid data. Please try again." });
+      // Last resort: try to repair truncated JSON by closing unclosed braces
+      try {
+        let fixed = text.replace(/,\s*\}/g, "}").replace(/,\s*\]/g, "]");
+        const opens  = (fixed.match(/\{/g) || []).length;
+        const closes = (fixed.match(/\}/g) || []).length;
+        if (opens > closes) fixed += "}".repeat(opens - closes);
+        parsed = JSON.parse(fixed);
+        console.warn("[JSON REPAIRED] Auto-fixed truncated response");
+      } catch (e2) {
+        console.error("[JSON PARSE FAILED] text:", text.substring(0, 300));
+        return res.status(502).json({ error: "AI returned invalid data. Please try again." });
+      }
     }
 
-    if (!parsed.prices) {
-      return res.status(502).json({ error: "AI returned unexpected format." });
+    if (!parsed || typeof parsed.prices !== "object") {
+      console.error("[BAD FORMAT] Keys received:", Object.keys(parsed || {}));
+      return res.status(502).json({ error: "AI returned unexpected format. Please try again." });
+    }
+
+    // Coerce all values to numbers (guard against AI returning string values like "$45.00")
+    const sanitizedPrices = {};
+    for (const [key, val] of Object.entries(parsed.prices)) {
+      if (val && typeof val === "object") {
+        sanitizedPrices[key] = {
+          labor:    parseFloat(String(val.labor).replace(/[^0-9.]/g, ""))    || 0,
+          material: parseFloat(String(val.material).replace(/[^0-9.]/g, "")) || 0,
+          qty:      parseFloat(String(val.qty).replace(/[^0-9.]/g, ""))      || 1
+        };
+      }
     }
 
     console.log("[AI SUCCESS]", JSON.stringify({
       time: new Date().toISOString(), ip,
-      pricesReturned: Object.keys(parsed.prices).length
+      itemsSent: cleanItems.length,
+      pricesReturned: Object.keys(sanitizedPrices).length
     }));
 
-    return res.status(200).json({ prices: parsed.prices });
+    return res.status(200).json({ prices: sanitizedPrices });
 
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      console.error("[TIMEOUT] AI request exceeded", OPENAI_TIMEOUT_MS / 1000, "seconds");
+      console.error("[TIMEOUT] AI request exceeded", OPENAI_TIMEOUT_MS / 1000, "s");
       return res.status(504).json({ error: "Request timed out. Please try again." });
     }
     console.error("[PROXY ERROR]", err.message);
