@@ -1208,38 +1208,58 @@ function updateTabScrollBtns() {
   const btnR = document.getElementById('tabScrollRight');
   if (!bar || !btnL || !btnR || !wrap) return;
 
-  const scrollLeft    = Math.round(bar.scrollLeft);
-  const scrollWidth   = bar.scrollWidth;
-  const clientWidth   = bar.clientWidth;
-  const hasOverflow   = scrollWidth > clientWidth + 2;
-  const canScrollLeft = scrollLeft > 2;
-  // Right arrow: show whenever there's overflow AND not yet scrolled to the end
-  const canScrollRight = hasOverflow && scrollLeft < scrollWidth - clientWidth - 2;
+  const scrollLeft     = Math.round(bar.scrollLeft);
+  const scrollWidth    = bar.scrollWidth;
+  const clientWidth    = bar.clientWidth;
+  // Use a 1px tolerance — some browsers report fractional values
+  const hasOverflow    = scrollWidth > clientWidth + 1;
+  const canScrollLeft  = scrollLeft > 1;
+  const canScrollRight = hasOverflow && (scrollLeft + clientWidth) < scrollWidth - 1;
 
   btnL.classList.toggle('hidden', !canScrollLeft);
   btnR.classList.toggle('hidden', !canScrollRight);
-
-  // Fade gradient: hide when at the end
   wrap.classList.toggle('scrolled-end', !canScrollRight);
 }
 
-// Wire up ResizeObserver so arrows re-check when window is resized
-let _tabResizeObserver = null;
+// Observe BOTH the bar width AND its children count changing
+let _tabResizeObserver  = null;
+let _tabMutationObserver = null;
 function initTabScrollObserver() {
   const bar = document.getElementById('tabBar');
   if (!bar) return;
+
+  // ResizeObserver: fires when the bar container is resized (window resize, panel changes)
   if (_tabResizeObserver) _tabResizeObserver.disconnect();
-  _tabResizeObserver = new ResizeObserver(() => updateTabScrollBtns());
+  _tabResizeObserver = new ResizeObserver(() => {
+    updateTabScrollBtns();
+    setTimeout(updateTabScrollBtns, 100); // extra pass after re-paint
+  });
   _tabResizeObserver.observe(bar);
+
+  // MutationObserver: fires when tabs are added/removed (step change)
+  if (_tabMutationObserver) _tabMutationObserver.disconnect();
+  _tabMutationObserver = new MutationObserver(() => {
+    // Run immediately + after fonts/subtotals have updated widths
+    updateTabScrollBtns();
+    requestAnimationFrame(updateTabScrollBtns);
+    setTimeout(updateTabScrollBtns, 200);
+    setTimeout(updateTabScrollBtns, 600);
+  });
+  _tabMutationObserver.observe(bar, { childList: true });
 }
 // ============================================================
-// GATE
+// GATE + SESSION TIMEOUT (5 minutes of inactivity → re-verify)
 // ============================================================
 (function() {
-  const GATE_KEY = 'utah_reia_access';
-  const PREFIX   = 'ureia_';
+  const GATE_KEY       = 'utah_reia_access';
+  const ACTIVE_KEY     = 'utah_reia_last_active'; // sessionStorage — clears on tab close
+  const PREFIX         = 'ureia_';
+  const INACTIVE_MS    = 5 * 60 * 1000; // 5 minutes
+  let   _activityTimer = null;
+
+  // ── Token validity (server-issued expiry check) ───────────────────────────
   function isValidToken(t) {
-    if (!t||!t.startsWith(PREFIX)) return false;
+    if (!t || !t.startsWith(PREFIX)) return false;
     try {
       const parts = t.split('_');
       if (parts.length < 2) return false;
@@ -1250,8 +1270,71 @@ function initTabScrollObserver() {
     } catch(e) { return false; }
   }
 
-  if (isValidToken(localStorage.getItem(GATE_KEY))) { show(); return; }
+  // ── Check if user has been inactive for > 5 min ──────────────────────────
+  function isSessionExpired() {
+    const last = parseInt(sessionStorage.getItem(ACTIVE_KEY) || '0');
+    if (last === 0) return false; // fresh page load — no prior activity recorded
+    return (Date.now() - last) > INACTIVE_MS;
+  }
 
+  // ── Record activity timestamp (throttled to once per 10s) ────────────────
+  function touchActivity() {
+    sessionStorage.setItem(ACTIVE_KEY, Date.now().toString());
+  }
+  function startActivityTracking() {
+    ['click','keydown','scroll','mousemove','touchstart'].forEach(evt => {
+      document.addEventListener(evt, onActivity, { passive: true });
+    });
+    touchActivity(); // record immediately on session start
+  }
+  function onActivity() {
+    // Throttle writes — only update every 10 seconds
+    if (_activityTimer) return;
+    _activityTimer = setTimeout(() => {
+      touchActivity();
+      _activityTimer = null;
+    }, 10000);
+  }
+
+  // ── Poll every 30s to auto-kick idle users ────────────────────────────────
+  function startIdlePoller() {
+    setInterval(() => {
+      if (isSessionExpired()) {
+        forceReVerify();
+      }
+    }, 30 * 1000);
+  }
+
+  // ── Force re-verification — clears auth but KEEPS calculator state ────────
+  function forceReVerify(reason) {
+    localStorage.removeItem(GATE_KEY);
+    sessionStorage.removeItem(ACTIVE_KEY);
+    // Show gate overlay over the app
+    document.getElementById('appWrap').style.display  = 'none';
+    document.getElementById('gateWrap').style.display = 'flex';
+    const msgEl = document.getElementById('gateMessage');
+    if (msgEl) {
+      msgEl.style.color = 'var(--slate)';
+      msgEl.innerText = reason || 'Your session has expired. Please re-enter your phone number.';
+    }
+    if (window.grecaptcha) { try { grecaptcha.reset(); } catch(_){} }
+  }
+
+  // ── Entry point ───────────────────────────────────────────────────────────
+  const token = localStorage.getItem(GATE_KEY);
+
+  // Has a valid token AND hasn't been idle for too long?
+  if (isValidToken(token) && !isSessionExpired()) {
+    show();
+    return;
+  }
+
+  // Token exists but user has been inactive — force re-verify
+  if (token && isSessionExpired()) {
+    forceReVerify('Your session expired due to inactivity. Please re-enter your phone number to continue.');
+  }
+
+  // ── Gate form submit ──────────────────────────────────────────────────────
   document.getElementById('gateBtn').addEventListener('click', async function() {
     const inp = document.getElementById('gatePhone');
     const msg = document.getElementById('gateMessage');
@@ -1264,10 +1347,10 @@ function initTabScrollObserver() {
     document.getElementById('gateBtn').disabled=true;
     try {
       const r = await fetch('https://rehab-estimator-delta.vercel.app/api/verify-phone',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({phone,captcha:captchaToken})
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({phone, captcha:captchaToken})
       });
-      if(!r.ok) throw new Error('Server error '+r.status);
+      if (!r.ok) throw new Error('Server error '+r.status);
       const d = await r.json();
       if (d.valid) {
         localStorage.setItem(GATE_KEY, d.token||(PREFIX+d.expiresAt+'_ok'));
@@ -1284,9 +1367,13 @@ function initTabScrollObserver() {
   });
 
   function show() {
-    document.getElementById('gateWrap').style.display='none';
-    document.getElementById('appWrap').style.display='flex';
+    document.getElementById('gateWrap').style.display = 'none';
+    document.getElementById('appWrap').style.display  = 'flex';
     initApp();
+    startActivityTracking();
+    startIdlePoller();
+    // Record session start
+    touchActivity();
   }
 })();
 </script>
