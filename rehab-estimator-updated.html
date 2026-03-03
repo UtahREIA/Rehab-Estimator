@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utah REIA – Rehab Estimator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+<style>
+  :root {
+    --navy:#0f2340; --navy-mid:#1a3a5c; --green:#1a7a4a; --green-hover:#15693e;
+    --green-bg:#f0fdf4; --green-border:#bbf7d0; --blue:#1d4ed8; --blue-light:#eff6ff;
+    --blue-border:#bfdbfe; --slate:#475569; --slate-light:#94a3b8; --border:#e2e8f0;
+    --bg:#f8fafc; --white:#ffffff; --red:#ef4444; --red-bg:#fef2f2;
+    --yellow-bg:#fefce8; --shadow-sm:0 1px 3px rgba(0,0,0,0.08);
+    --shadow-lg:0 20px 50px rgba(0,0,0,0.15);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--navy);min-height:100vh;}
+
+  /* GATE */
+  #gateWrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(140deg,#0a1628 0%,var(--navy) 50%,#0e2d4a 100%);padding:20px;}
+  .gate-card{background:#fff;border-radius:20px;box-shadow:var(--shadow-lg);padding:48px 40px;width:100%;max-width:420px;text-align:center;}
+  .gate-card img{max-width:150px;margin-bottom:28px;}
+  .gate-card h1{font-size:1.5rem;font-weight:700;color:var(--navy);margin-bottom:8px;}
+  .gate-card .subtitle{color:var(--slate);font-size:0.88rem;margin-bottom:32px;line-height:1.6;}
+  .gate-field{text-align:left;margin-bottom:16px;}
+  .gate-field label{display:block;font-size:0.75rem;font-weight:700;color:var(--navy);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.07em;}
+  .gate-field input{width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:1rem;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+  .gate-field input:focus{border-color:var(--green);}
+  .gate-btn{width:100%;padding:14px;background:var(--green);color:white;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:8px;}
+  .gate-btn:hover{background:var(--green-hover);}
+  #gateMessage{margin-top:12px;font-size:0.83rem;color:var(--red);min-height:18px;}
+  .gate-footer-note{margin-top:24px;font-size:0.78rem;color:var(--slate-light);}
+
+  /* APP */
+  #appWrap{display:none;min-height:100vh;flex-direction:column;}
+  .app-nav{background:var(--navy);color:white;padding:0 20px;display:flex;align-items:center;height:58px;position:sticky;top:0;z-index:200;box-shadow:0 2px 12px rgba(0,0,0,0.25);}
+  .nav-brand{display:flex;align-items:center;gap:12px;}
+  .nav-brand img{height:32px;}
+  .nav-brand span{font-size:0.9rem;font-weight:600;color:#93c5fd;}
+
+  /* AI STATUS */
+  #aiStatusBar{display:none;padding:9px 20px;font-size:0.82rem;align-items:center;gap:10px;}
+  #aiStatusBar.loading{display:flex;background:var(--blue-light);color:var(--blue);}
+  #aiStatusBar.success{display:flex;background:var(--green-bg);color:var(--green);}
+  #aiStatusBar.error{display:flex;background:var(--red-bg);color:var(--red);}
+
+  /* SUMMARY STRIP */
+  .summary-strip{background:#fff;border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+  .s-block{display:flex;flex-direction:column;}
+  .s-block .sl{font-size:0.67rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--slate-light);}
+  .s-block .sv{font-size:1.4rem;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums;}
+  .s-block.grand .sv{color:var(--green);font-size:1.9rem;}
+  .s-sep{width:1px;height:36px;background:var(--border);flex-shrink:0;}
+  #reportTitle{flex:1;min-width:180px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:0.92rem;font-family:'DM Sans',sans-serif;font-weight:600;color:var(--navy);outline:none;}
+  #reportTitle::placeholder{font-weight:400;color:var(--slate-light);}
+  .s-actions{margin-left:auto;display:flex;gap:8px;align-items:center;}
+  .btn-primary{padding:9px 18px;background:linear-gradient(135deg,#059669 0%,#1d4ed8 120%);color:white;border:none;border-radius:7px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:7px;box-shadow:0 2px 10px rgba(5,150,105,0.25);}
+  .btn-primary:disabled{opacity:0.55;cursor:not-allowed;}
+  .btn-secondary{padding:8px 14px;border:1.5px solid var(--border);background:#fff;border-radius:7px;font-size:0.8rem;font-weight:600;cursor:pointer;color:var(--slate);font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:5px;}
+  .btn-danger{color:var(--red);border-color:#fecaca;}
+  .btn-danger:hover{background:var(--red-bg);border-color:var(--red);}
+
+  /* TAB BAR */
+  .tab-bar-wrap{background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:stretch;position:relative;}
+  .tab-scroll-btn{flex-shrink:0;width:36px;display:flex;align-items:center;justify-content:center;background:#fff;border:none;cursor:pointer;color:var(--slate);font-size:1rem;z-index:2;transition:background .15s,color .15s;}
+  .tab-scroll-btn:hover{background:var(--bg);color:var(--navy);}
+  .tab-scroll-btn.hidden{opacity:0;pointer-events:none;}
+  .tab-scroll-btn.left{border-right:1px solid var(--border);}
+  .tab-scroll-btn.right{border-left:1px solid var(--border);}
+  .tab-bar{flex:1;display:flex;overflow-x:auto;padding:0 4px;scrollbar-width:none;scroll-behavior:smooth;}
+  .tab-bar::-webkit-scrollbar{display:none;}
+  .tab-pill{padding:11px 14px;border:none;background:none;cursor:pointer;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--slate-light);white-space:nowrap;border-bottom:3px solid transparent;font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;gap:1px;}
+  .tab-pill.active{color:var(--navy);border-bottom-color:var(--green);}
+  .tab-pill .tp-sub{font-size:0.62rem;font-weight:500;color:var(--green);font-variant-numeric:tabular-nums;min-height:10px;}
+
+  /* PANELS */
+  .panels-area{flex:1;padding:20px;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  /* TABLE */
+  .exp-card{background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm);}
+  .exp-table{width:100%;border-collapse:collapse;}
+  .exp-table thead{background:#f1f5f9;border-bottom:2px solid var(--border);}
+  .exp-table th{padding:9px 12px;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--slate);text-align:left;}
+  .exp-table th.r{text-align:right;}
+  .exp-table th.c{text-align:center;}
+  .exp-table td{padding:0;border-bottom:1px solid #f8fafc;vertical-align:middle;}
+  .exp-row:hover{background:#fafbfc;}
+  .exp-row.is-done{opacity:0.5;}
+  .exp-row.is-done .inp-label{text-decoration:line-through;color:var(--slate-light);}
+  .exp-row.contingency-row{background:var(--yellow-bg);}
+  .exp-row.contingency-row:hover{background:#fef9c3;}
+  .chk{width:40px;text-align:center;padding:0 4px;}
+  .chk input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:var(--green);}
+  .inp-label{width:100%;padding:8px 10px;border:none;outline:none;font-size:0.85rem;font-family:'DM Sans',sans-serif;color:var(--navy);background:transparent;}
+  .inp-label:focus{background:var(--blue-light);}
+  .sel-method{width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:5px;font-size:0.8rem;font-family:'DM Sans',sans-serif;color:var(--navy);background:white;outline:none;cursor:pointer;}
+  .sel-method:disabled{background:#f1f5f9;color:var(--slate-light);cursor:default;}
+  .inp-num{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:5px;font-size:0.83rem;font-family:'DM Mono',monospace;color:var(--navy);background:white;outline:none;text-align:right;}
+  .inp-num:focus{border-color:var(--green);background:var(--blue-light);}
+  .inp-num:disabled{background:#f1f5f9;color:var(--slate-light);cursor:default;border-color:transparent;}
+  .inp-num.ai-hit{background:#eff6ff;border-color:var(--blue-border);}
+  .cell-total{padding:7px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:0.85rem;font-weight:600;color:var(--slate-light);white-space:nowrap;}
+  .cell-total.has-val{color:var(--green);}
+  .contingency-row .cell-total{color:var(--navy) !important;font-weight:800;}
+  .del-btn{background:none;border:none;cursor:pointer;color:var(--slate-light);padding:3px 5px;border-radius:4px;font-size:0.9rem;}
+  .del-btn:hover{color:var(--red);background:var(--red-bg);}
+  .card-foot{padding:11px 14px;display:flex;align-items:center;justify-content:space-between;background:#fafbfc;border-top:1px solid var(--border);}
+  .add-btn{padding:7px 14px;background:white;border:1.5px solid var(--border);border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;color:var(--slate);font-family:'DM Sans',sans-serif;}
+  .add-btn:hover{border-color:var(--green);color:var(--green);background:var(--green-bg);}
+  .subtotal-lbl{font-size:0.82rem;color:var(--slate);}
+  .subtotal-lbl strong{color:var(--navy);font-family:'DM Mono',monospace;}
+
+  /* MODAL */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;}
+  .modal-overlay.active{display:flex;}
+  .modal-box{background:white;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 20px 50px rgba(0,0,0,0.25);text-align:center;}
+  .modal-icon{font-size:2rem;margin-bottom:12px;}
+  .modal-title{font-size:1rem;font-weight:800;color:var(--navy);margin-bottom:8px;}
+  .modal-msg{font-size:0.85rem;color:var(--slate);margin-bottom:24px;line-height:1.5;}
+  .modal-btns{display:flex;gap:10px;justify-content:center;}
+  .modal-btn-cancel{padding:9px 20px;border:1.5px solid var(--border);background:white;border-radius:7px;font-weight:600;font-size:0.85rem;cursor:pointer;font-family:inherit;color:var(--slate);}
+  .modal-btn-confirm{padding:9px 20px;background:var(--red);color:white;border:none;border-radius:7px;font-weight:700;font-size:0.85rem;cursor:pointer;font-family:inherit;}
+  .spin{width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* STEP NAV */
+  .step-nav{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:center;}
+  .step-item{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;min-width:110px;}
+  .step-circle{width:32px;height:32px;border-radius:50%;border:2px solid var(--border);background:#fff;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:var(--slate-light);}
+  .step-item.active .step-circle{background:var(--navy);border-color:var(--navy);color:white;}
+  .step-item.done .step-circle{background:var(--green);border-color:var(--green);color:white;}
+  .step-label{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--slate-light);white-space:nowrap;}
+  .step-item.active .step-label{color:var(--navy);}
+  .step-item.done .step-label{color:var(--green);}
+  .step-subtotal{font-size:0.68rem;font-weight:500;color:var(--green);font-family:'DM Mono',monospace;min-height:12px;}
+  .step-connector{height:2px;flex:1;max-width:80px;margin-bottom:28px;background:var(--border);}
+  .step-connector.done{background:var(--green);}
+
+  /* SECTION HEADER */
+  .section-header{background:var(--bg);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .section-header-title{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--slate-light);}
+  .section-nav-btns{display:flex;gap:8px;}
+  .step-nav-btn{padding:6px 14px;border:1.5px solid var(--border);background:white;border-radius:6px;font-size:0.78rem;font-weight:700;cursor:pointer;color:var(--slate);font-family:'DM Sans',sans-serif;}
+  .step-nav-btn.next{background:var(--navy);color:white;border-color:var(--navy);}
+
+  /* RESULTS */
+  .results-page{display:none;padding:24px;}
+  .results-page.active{display:block;}
+  .results-header{margin-bottom:24px;}
+  .results-header h2{font-size:1.4rem;font-weight:800;color:var(--navy);margin-bottom:4px;}
+  .results-header p{font-size:0.85rem;color:var(--slate);}
+  .results-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
+  .result-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);}
+  .result-card.highlight{border-color:var(--green-border);background:var(--green-bg);}
+  .result-card .rc-label{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--slate-light);margin-bottom:6px;}
+  .result-card .rc-value{font-size:2rem;font-weight:800;color:var(--navy);font-family:'DM Mono',monospace;}
+  .result-card.highlight .rc-value{color:var(--green);}
+  .result-card .rc-sub{font-size:0.78rem;color:var(--slate);margin-top:4px;}
+  .results-breakdown{background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm);margin-bottom:24px;}
+  .rb-header{background:#f1f5f9;padding:12px 16px;border-bottom:2px solid var(--border);font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--slate);display:grid;grid-template-columns:1fr 1fr auto;gap:16px;}
+  .rb-header span:last-child{text-align:right;min-width:100px;}
+  .rb-row{padding:10px 16px;border-bottom:1px solid #f1f5f9;display:grid;grid-template-columns:1fr 1fr auto;gap:16px;align-items:center;font-size:0.85rem;}
+  .rb-section{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--slate-light);background:var(--bg);padding:6px 16px;border-bottom:1px solid var(--border);}
+  .rb-cat{font-weight:600;color:var(--navy);}
+  .rb-badge{font-size:0.68rem;padding:2px 7px;border-radius:20px;font-weight:600;}
+  .rb-badge.ext{background:#fef3c7;color:#92400e;}
+  .rb-badge.int{background:#dbeafe;color:#1e40af;}
+  .rb-badge.gen{background:#f3e8ff;color:#6b21a8;}
+  .rb-amount{text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--green);min-width:100px;}
+  .rb-amount.zero{color:var(--slate-light);font-weight:400;}
+  .rb-total-row{padding:12px 16px;background:var(--navy);color:white;display:grid;grid-template-columns:1fr 1fr auto;gap:16px;font-weight:800;font-size:0.9rem;}
+  .rb-total-row .rb-amount{color:#6ee7b7;}
+  .results-actions{display:flex;gap:10px;flex-wrap:wrap;}
+
+  @media(max-width:680px){
+    .summary-strip{padding:10px 12px;gap:12px;}
+    .panels-area{padding:12px;}
+    .s-block.grand .sv{font-size:1.5rem;}
+    .exp-table th:nth-child(4),.exp-table td:nth-child(4),.exp-table th:nth-child(6),.exp-table td:nth-child(6){display:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- GATE -->
+<div id="gateWrap">
+  <div class="gate-card">
+    <img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA">
+    <h1>Rehab Estimator</h1>
+    <p class="subtitle">Enter your phone number to unlock the calculator.<br>For Utah REIA members only.</p>
+    <div class="gate-field">
+      <label>Phone Number</label>
+      <input id="gatePhone" type="tel" placeholder="(801) 555-1234" inputmode="tel" autocomplete="off">
+    </div>
+    <div class="g-recaptcha" data-sitekey="6LcrKXIsAAAAANi8RSH29vfM5NyEIOA0b1G25-n9" data-theme="light" style="margin-bottom:12px;display:flex;justify-content:center;"></div>
+    <button class="gate-btn" id="gateBtn">Unlock Estimator →</button>
+    <div id="gateMessage"></div>
+    <p class="gate-footer-note">Need access? Contact Utah REIA.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appWrap">
+  <nav class="app-nav">
+    <div class="nav-brand">
+      <img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA">
+      <span>Rehab Estimator</span>
+    </div>
+  </nav>
+
+  <div id="aiStatusBar"><span class="spin"></span><span id="aiStatusTxt"></span></div>
+
+  <div class="summary-strip">
+    <div class="s-block grand"><span class="sl">Grand Total</span><span class="sv" id="grandTotal">$0.00</span></div>
+    <div class="s-sep"></div>
+    <div class="s-block"><span class="sl">General</span><span class="sv" id="genTotal">$0.00</span></div>
+    <div class="s-sep"></div>
+    <div class="s-block"><span class="sl">Exterior</span><span class="sv" id="extTotal">$0.00</span></div>
+    <div class="s-sep"></div>
+    <div class="s-block"><span class="sl">Interior</span><span class="sv" id="intTotal">$0.00</span></div>
+    <div class="s-sep"></div>
+    <div class="s-block"><span class="sl">Completed</span><span class="sv" id="doneCount">0</span></div>
+    <div class="s-sep"></div>
+    <input type="text" id="reportTitle" placeholder="Report title – e.g. 123 Main St, Salt Lake City">
+    <div class="s-actions">
+      <button class="btn-primary" id="aiBtn" onclick="doAIFill()"><span>✦</span> AI Auto-Fill Prices</button>
+      <button class="btn-secondary" onclick="exportExcel()">📊 Export Excel</button>
+      <button class="btn-secondary" onclick="printCalculator()">🖨 Print</button>
+      <button class="btn-secondary btn-danger" onclick="doReset()">✕ Reset</button>
+    </div>
+  </div>
+
+  <div class="step-nav">
+    <div class="step-item active" id="step-gen" onclick="goStep('general')">
+      <div class="step-circle" id="step-circle-gen">1</div>
+      <div class="step-label">General</div>
+      <div class="step-subtotal" id="step-sub-gen"></div>
+    </div>
+    <div class="step-connector" id="connector-0"></div>
+    <div class="step-item" id="step-ext" onclick="goStep('exterior')">
+      <div class="step-circle" id="step-circle-ext">2</div>
+      <div class="step-label">Exterior</div>
+      <div class="step-subtotal" id="step-sub-ext"></div>
+    </div>
+    <div class="step-connector" id="connector-1"></div>
+    <div class="step-item" id="step-int" onclick="goStep('interior')">
+      <div class="step-circle" id="step-circle-int">3</div>
+      <div class="step-label">Interior</div>
+      <div class="step-subtotal" id="step-sub-int"></div>
+    </div>
+    <div class="step-connector" id="connector-2"></div>
+    <div class="step-item" id="step-res" onclick="goStep('results')">
+      <div class="step-circle" id="step-circle-res">4</div>
+      <div class="step-label">Results</div>
+      <div class="step-subtotal" id="step-sub-res"></div>
+    </div>
+  </div>
+
+  <div class="section-header" id="sectionHeader">
+    <span class="section-header-title" id="sectionHeaderTitle">General Conditions</span>
+    <div class="section-nav-btns">
+      <button class="step-nav-btn" id="prevStepBtn" onclick="prevStep()" style="display:none">← Back</button>
+      <button class="step-nav-btn next" id="nextStepBtn" onclick="nextStep()">Next: Exterior →</button>
+    </div>
+  </div>
+
+  <div class="tab-bar-wrap" id="tabBarWrap">
+    <button class="tab-scroll-btn left hidden" id="tabScrollLeft" onclick="scrollTabBar(-1)" title="Scroll left">&#8592;</button>
+    <div class="tab-bar" id="tabBar"></div>
+    <button class="tab-scroll-btn right hidden" id="tabScrollRight" onclick="scrollTabBar(1)" title="Scroll right">&#8594;</button>
+  </div>
+  <div class="panels-area" id="panelsArea"></div>
+
+  <div class="results-page" id="resultsPage">
+    <div class="results-header">
+      <h2 id="results-title">Estimate Results</h2>
+      <p>Full cost breakdown for your rehab project</p>
+    </div>
+    <div class="results-grid">
+      <div class="result-card highlight"><div class="rc-label">Grand Total Estimate</div><div class="rc-value" id="res-grand">$0.00</div><div class="rc-sub">All sections combined</div></div>
+      <div class="result-card"><div class="rc-label">General Conditions</div><div class="rc-value" id="res-gen">$0.00</div><div class="rc-sub">General, professional & risk items</div></div>
+      <div class="result-card"><div class="rc-label">Exterior Expenses</div><div class="rc-value" id="res-ext">$0.00</div><div class="rc-sub">Demo, roofing, carpentry, concrete & more</div></div>
+      <div class="result-card"><div class="rc-label">Interior Expenses</div><div class="rc-value" id="res-int">$0.00</div><div class="rc-sub">Kitchen, bathrooms, flooring, HVAC & more</div></div>
+    </div>
+    <div class="results-breakdown">
+      <div class="rb-header"><span>Category</span><span>Section</span><span>Total</span></div>
+      <div id="rb-body"></div>
+      <div class="rb-total-row"><span>Grand Total</span><span></span><span class="rb-amount" id="rb-grand">$0.00</span></div>
+    </div>
+    <div class="results-actions">
+      <button class="btn-secondary" onclick="goStep('general')">← Edit General</button>
+      <button class="btn-secondary" onclick="goStep('exterior')">← Edit Exterior</button>
+      <button class="btn-secondary" onclick="goStep('interior')">← Edit Interior</button>
+      <button class="btn-secondary" onclick="exportExcel()">📊 Export Excel</button>
+      <button class="btn-secondary" onclick="printCalculator()">🖨 Print</button>
+    </div>
+  </div>
+
+  <footer style="text-align:center;padding:14px;font-size:0.72rem;color:var(--slate-light);border-top:1px solid var(--border);background:white;">
+    © 2025 Utah REIA Repair Estimator · All rights reserved
+  </footer>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <div class="modal-icon">⚠️</div>
+    <div class="modal-title" id="modalTitle">Are you sure?</div>
+    <div class="modal-msg" id="modalMsg">This action cannot be undone.</div>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" id="modalCancel">Cancel</button>
+      <button class="modal-btn-confirm" id="modalConfirm">Yes, Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// UNIT OF MEASURE — full names, no abbreviations
+// ============================================================
+const UNITS = [
+  {value:'SF',  label:'Square Foot'},
+  {value:'LF',  label:'Linear Feet'},
+  {value:'EA',  label:'Each'},
+  {value:'LS',  label:'Lump Sum'},
+  {value:'SQ',  label:'Roofing Square'},
+  {value:'CY',  label:'Cubic Yard'},
+  {value:'HR',  label:'Hour'},
+  {value:'PCT', label:'Percentage'}
+];
+
+// ============================================================
+// CATEGORIES
+// ============================================================
+const CATS = [
+  // ── GENERAL ─────────────────────────────────────────────
+  {id:'gen-cond', label:'General Conditions', group:'general', items:[
+    {label:'Project management',unit:'HR'},{label:'Site supervision',unit:'HR'},
+    {label:'Temporary utilities',unit:'LS'},{label:'Storage container',unit:'LS'},
+    {label:'Temporary toilet',unit:'LS'},{label:'Temporary water/power',unit:'LS'},
+    {label:'Material delivery/handling',unit:'LS'},{label:'Labor supervision',unit:'HR'},
+    {label:'Relay/Locksmith',unit:'EA'},{label:'Admin/Security',unit:'LS'},
+    {label:'Misc tools & consumables',unit:'LS'}
+  ]},
+  {id:'prof-soft', label:'Professional & Soft Costs', group:'general', items:[
+    {label:'Permit fees',unit:'LS'},{label:'Engineering/Plans',unit:'LS'},
+    {label:'Permit plans',unit:'LS'},{label:'Legal/Title',unit:'LS'},
+    {label:'Inspections',unit:'EA'},{label:'Contingency/Reserves',unit:'LS'}
+  ]},
+  {id:'risk-financial', label:'Risk & Financial Controls', group:'general', items:[
+    {label:'Pre-listing allowance',unit:'PCT'},
+    {label:'Insurance/Risk',unit:'LS'},
+    {label:'Contingency – % of hard costs',unit:'PCT',isContingency:true,qty:'10'}
+  ]},
+  // ── EXTERIOR ─────────────────────────────────────────────
+  {id:'ext-demo', label:'A. Demolition & Site Prep', group:'exterior', items:[
+    {label:'Interior demo',unit:'LS'},{label:'Exterior demo (if full tear-down/deconstruct)',unit:'LS'},
+    {label:'Foundation site demolition',unit:'CY'},{label:'Backfill',unit:'CY'},{label:'Excavation',unit:'CY'}
+  ]},
+  {id:'abatement', label:'B. Abatement', group:'exterior', items:[
+    {label:'Asbestos testing',unit:'EA'},{label:'Asbestos abatement',unit:'SF'},
+    {label:'Mold testing',unit:'EA'},{label:'Mold remediation',unit:'SF'},
+    {label:'Lead paint remediation',unit:'SF'}
+  ]},
+  {id:'roofing', label:'C. Roofing', group:'exterior', items:[
+    {label:'Tear off',unit:'SQ'},{label:'Asphalt shingles',unit:'SQ'},
+    {label:'Roof decking/sheathing',unit:'SF'},{label:'Flashing',unit:'LF'},
+    {label:'Chimney repair',unit:'EA'},{label:'Skylight',unit:'EA'},
+    {label:'Gutters',unit:'LF'},{label:'Soffit/Fascia',unit:'LF'},
+    {label:'Roof vents',unit:'EA'},{label:'Eave trim',unit:'LF'},
+    {label:'Chimney/roof repair',unit:'LS'}
+  ]},
+  {id:'ext-carp', label:'D. Exterior Carpentry & Developer', group:'exterior', items:[
+    {label:'Siding',unit:'SF'},{label:'Trim/Caulk',unit:'LF'},
+    {label:'Exterior door',unit:'EA'},{label:'Window',unit:'EA'},
+    {label:'Deck/Porch',unit:'SF'},{label:'Fence/Wall/Retaining-wall repair',unit:'LF'},
+    {label:'Stucco repair',unit:'SF'}
+  ]},
+  {id:'foundation', label:'E. Foundation & Structural Repairs', group:'exterior', items:[
+    {label:'Crack repair',unit:'LF'},{label:'Foundation waterproofing',unit:'SF'},
+    {label:'Footing/Pier repair',unit:'EA'},{label:'Crawl space repair',unit:'LS'},
+    {label:'Structural wall repair',unit:'SF'},{label:'Structural beam install',unit:'LF'},
+    {label:'Leveling/Underpinning',unit:'EA'}
+  ]},
+  {id:'concrete', label:'F. Concrete & Flatwork', group:'exterior', items:[
+    {label:'Driveway',unit:'SF'},{label:'Sidewalk',unit:'SF'},
+    {label:'Steps',unit:'EA'},{label:'Patio slab',unit:'SF'},
+    {label:'Curb/Gutter',unit:'LF'},{label:'Footing(s)',unit:'CY'}
+  ]},
+  {id:'drainage', label:'G. Drainage Systems', group:'exterior', items:[
+    {label:'French drain',unit:'LF'},{label:'Storm drain system',unit:'LS'},
+    {label:'Catch basins',unit:'EA'},{label:'Downspout extensions',unit:'EA'},
+    {label:'Grading/Re-grading',unit:'LS'}
+  ]},
+  {id:'landscaping', label:'H. Landscaping', group:'exterior', items:[
+    {label:'Grass',unit:'SF'},{label:'Rock',unit:'SF'},{label:'Back',unit:'SF'},
+    {label:'Sprinkler install',unit:'EA'},{label:'Sprinkler repair',unit:'EA'},
+    {label:'Tree trimming',unit:'EA'},{label:'Save tree',unit:'EA'},
+    {label:'Remove tree',unit:'EA'},{label:'Cleanup/Haul-away',unit:'LS'}
+  ]},
+  {id:'ext-paint', label:'I. Exterior Paint', group:'exterior', items:[
+    {label:'Paint – siding',unit:'SF'},{label:'Paint – trim',unit:'LF'},
+    {label:'Paint – doors',unit:'EA'},{label:'Paint – decks',unit:'SF'},
+    {label:'Full exterior repaint',unit:'SF'}
+  ]},
+  {id:'ext-utilities', label:'J. Exterior Utilities', group:'exterior', items:[
+    {label:'Sewer line',unit:'LF'},{label:'Water service',unit:'LF'},
+    {label:'Septic pump',unit:'EA'},{label:'Gas service',unit:'LF'},
+    {label:'Utility meter',unit:'EA'}
+  ]},
+  // ── INTERIOR ─────────────────────────────────────────────
+  {id:'int-demo', label:'A. Interior Demolition', group:'interior', items:[
+    {label:'Demo full',unit:'SF'},{label:'Demo gut floor',unit:'SF'},
+    {label:'Kitchen demo',unit:'EA'},{label:'Bathroom demo',unit:'EA'},
+    {label:'Room demo',unit:'EA'},{label:'Haul demo',unit:'LS'}
+  ]},
+  {id:'structural', label:'B. Structural / Framing', group:'interior', items:[
+    {label:'Interior framing',unit:'LF'},{label:'Load-bearing beam install',unit:'EA'},
+    {label:'Subfloor repair',unit:'SF'},{label:'Structural repair',unit:'LS'}
+  ]},
+  {id:'insulation', label:'C. Insulation', group:'interior', items:[
+    {label:'Wall insulation',unit:'SF'},{label:'Attic insulation',unit:'SF'},
+    {label:'Floor insulation',unit:'SF'},{label:'Sound insulation',unit:'SF'}
+  ]},
+  {id:'drywall', label:'D. Drywall', group:'interior', items:[
+    {label:'Hang drywall',unit:'SF'},{label:'Tape & mud',unit:'SF'},
+    {label:'Skim coat',unit:'SF'},{label:'Texture',unit:'SF'},
+    {label:'Ceiling drywall',unit:'SF'}
+  ]},
+  {id:'waterproofing', label:'E. Waterproofing Systems', group:'interior', items:[
+    {label:'Basement waterproofing',unit:'SF'},{label:'Vapor barrier',unit:'SF'},
+    {label:'Bathroom waterproof membrane',unit:'SF'},{label:'Crawl space encapsulation',unit:'SF'}
+  ]},
+  {id:'int-paint', label:'F. Interior Paint', group:'interior', items:[
+    {label:'Walls',unit:'SF'},{label:'Ceilings',unit:'SF'},
+    {label:'Doors',unit:'EA'},{label:'Stairs',unit:'LF'},
+    {label:'Hall repaint',unit:'LS'}
+  ]},
+  {id:'flooring', label:'G. Flooring', group:'interior', items:[
+    {label:'LVP',unit:'SF'},{label:'Hardwood',unit:'SF'},{label:'Tile',unit:'SF'},
+    {label:'Tile shower width',unit:'SF'},{label:'Carpet',unit:'SF'},
+    {label:'Tile replacement',unit:'SF'},{label:'Baseboards',unit:'LF'},
+    {label:'Backerboard',unit:'SF'}
+  ]},
+  {id:'kitchen', label:'H. Kitchen', group:'interior', items:[
+    {label:'Base cabinets',unit:'LF'},{label:'Upper cabinets',unit:'LF'},
+    {label:'Pantry',unit:'EA'},{label:'Island',unit:'EA'},
+    {label:'Cabinet allowance',unit:'LS'},{label:'Cabinet package',unit:'LS'},
+    {label:'Countertops/Laminate',unit:'SF'},{label:'Countertops/Quartz finish',unit:'SF'},
+    {label:'Sink/Faucet',unit:'EA'},{label:'Disposal',unit:'EA'},
+    {label:'Appliances',unit:'EA'},{label:'Hardware',unit:'EA'},
+    {label:'Specialty lighting',unit:'EA'},{label:'Hood fan',unit:'EA'},
+    {label:'Steel hood',unit:'EA'},{label:'Box',unit:'EA'}
+  ]},
+  {id:'bathrooms', label:'I. Bathrooms', group:'interior', items:[
+    {label:'Toilet',unit:'EA'},{label:'Vanity',unit:'EA'},{label:'Mirror',unit:'EA'},
+    {label:'Sink',unit:'EA'},{label:'Faucet',unit:'EA'},
+    {label:'Shower/Tub combo',unit:'EA'},{label:'Tile shower',unit:'SF'},
+    {label:'Tile floor',unit:'SF'},{label:'Shower door',unit:'EA'},
+    {label:'Bath accessories',unit:'LS'},{label:'Glass shower door',unit:'EA'}
+  ]},
+  {id:'hvac', label:'J. HVAC', group:'interior', items:[
+    {label:'Furnace',unit:'EA'},{label:'AC unit',unit:'EA'},
+    {label:'Heat pump',unit:'EA'},{label:'Ductwork',unit:'LS'},
+    {label:'Thermostat',unit:'EA'}
+  ]},
+  {id:'plumbing', label:'K. Plumbing', group:'interior', items:[
+    {label:'Repipe',unit:'LS'},{label:'Water heater',unit:'EA'},
+    {label:'Isolator valve replacement',unit:'EA'},{label:'Fixture replacement',unit:'EA'},
+    {label:'Drain repair',unit:'LF'}
+  ]},
+  {id:'electrical', label:'L. Electrical', group:'interior', items:[
+    {label:'Panel upgrade',unit:'EA'},{label:'Full rewire',unit:'LS'},
+    {label:'Can light',unit:'EA'},{label:'Switch/Outlet',unit:'EA'},
+    {label:'Smoke/CO2 upgrade',unit:'EA'},{label:'GFCI upgrade',unit:'EA'},
+    {label:'Ceiling fan',unit:'EA'}
+  ]},
+  {id:'int-finish', label:'M. Interior Finish & Misc', group:'interior', items:[
+    {label:'Interior doors',unit:'EA'},{label:'Door hardware',unit:'EA'},
+    {label:'Stair railing',unit:'LF'},{label:'Closet shelving',unit:'LF'},
+    {label:'Transition/Trim',unit:'LF'},{label:'Radiant refrigerator',unit:'EA'}
+  ]}
+];
+
+const STORE = 'utah_reia_v6';
+let state = {};
+let activeTab = CATS[0].id;
+const PROXY_URL = 'https://rehab-estimator-delta.vercel.app/api/ai-pricing';
+
+const GENERAL_CATS  = CATS.filter(c => c.group==='general').map(c => c.id);
+const EXTERIOR_CATS = CATS.filter(c => c.group==='exterior').map(c => c.id);
+const INTERIOR_CATS = CATS.filter(c => c.group==='interior').map(c => c.id);
+let currentStep = 'general';
+
+// ============================================================
+// STEP NAVIGATION
+// ============================================================
+function goStep(step) {
+  currentStep = step;
+  const panelsArea    = document.getElementById('panelsArea');
+  const resultsPage   = document.getElementById('resultsPage');
+  const tabBar        = document.getElementById('tabBar');
+  const tabBarWrap    = document.getElementById('tabBarWrap');
+  const sectionHeader = document.getElementById('sectionHeader');
+
+  if (step === 'results') {
+    panelsArea.style.display = 'none';
+    tabBarWrap.style.display = 'none';
+    sectionHeader.style.display = 'none';
+    resultsPage.classList.add('active');
+    buildResultsPage();
+  } else {
+    panelsArea.style.display    = '';
+    tabBarWrap.style.display = '';
+    sectionHeader.style.display = '';
+    resultsPage.classList.remove('active');
+    buildTabsForStep(step);
+    buildPanelsForStep(step);
+    renderAll();
+    recalcAll();
+  }
+  applyStepUI(step);
+}
+
+function applyStepUI(step) {
+  const steps = ['general','exterior','interior','results'];
+  const ids   = ['gen','ext','int','res'];
+  const ci    = steps.indexOf(step);
+  steps.forEach((s, idx) => {
+    const el = document.getElementById('step-' + ids[idx]);
+    if (!el) return;
+    el.classList.remove('active','done');
+    if (idx < ci) el.classList.add('done');
+    else if (idx === ci) el.classList.add('active');
+  });
+  for (let i=0; i<3; i++) {
+    const el = document.getElementById('connector-' + i);
+    if (el) el.classList.toggle('done', i < ci);
+  }
+  const titles    = {general:'General Conditions', exterior:'Exterior Expenses', interior:'Interior Expenses', results:'Results'};
+  const nextLbls  = {general:'Next: Exterior →', exterior:'Next: Interior →', interior:'Next: Results →'};
+  document.getElementById('sectionHeaderTitle').textContent = titles[step] || '';
+  const nextBtn = document.getElementById('nextStepBtn');
+  const prevBtn = document.getElementById('prevStepBtn');
+  if (nextBtn) { nextBtn.style.display = step==='results' ? 'none' : ''; nextBtn.textContent = nextLbls[step] || ''; }
+  if (prevBtn)  prevBtn.style.display  = step !== 'general' ? '' : 'none';
+}
+
+function nextStep() {
+  if (currentStep==='general')  goStep('exterior');
+  else if (currentStep==='exterior') goStep('interior');
+  else if (currentStep==='interior') goStep('results');
+}
+function prevStep() {
+  if (currentStep==='interior') goStep('exterior');
+  else if (currentStep==='exterior') goStep('general');
+  else if (currentStep==='results')  goStep('interior');
+}
+
+function getCats(step) {
+  return step==='general' ? GENERAL_CATS : step==='exterior' ? EXTERIOR_CATS : INTERIOR_CATS;
+}
+
+function buildTabsForStep(step) {
+  const bar = document.getElementById('tabBar');
+  bar.innerHTML = '';
+  getCats(step).forEach(cid => {
+    const cat = CATS.find(c => c.id===cid); if (!cat) return;
+    let sub = 0;
+    state[cid].rows.forEach(r => sub += rowTotal(r));
+    // add contingency to sub for display
+    state[cid].rows.forEach(r => { if(r.isContingency){ const p=parseFloat(r.qty); sub += isNaN(p)?0:getContingencyBase()*(p/100); } });
+    const btn = document.createElement('button');
+    btn.className = 'tab-pill' + (cid===activeTab ? ' active' : '');
+    btn.id = 'tab-' + cid;
+    btn.onclick = () => switchTab(cid);
+    btn.innerHTML = `${cat.label}<span class="tp-sub">${sub>0?fmt(sub):''}</span>`;
+    bar.appendChild(btn);
+  });
+}
+  setTimeout(updateTabScrollBtns, 50);
+
+function buildPanelsForStep(step) {
+  const area = document.getElementById('panelsArea');
+  area.innerHTML = '';
+  const cats = getCats(step);
+  if (!cats.includes(activeTab)) activeTab = cats[0];
+  cats.forEach(cid => {
+    const cat = CATS.find(c => c.id===cid); if (!cat) return;
+    const panel = document.createElement('div');
+    panel.className = 'tab-panel' + (cid===activeTab ? ' active' : '');
+    panel.id = 'panel-' + cid;
+    panel.innerHTML = `
+      <div class="exp-card">
+        <table class="exp-table">
+          <thead><tr>
+            <th class="c" style="width:40px;">Done</th>
+            <th>Description</th>
+            <th style="width:160px;">Unit of Measure</th>
+            <th class="r" style="width:90px;">Quantity</th>
+            <th class="r" style="width:110px;">Labor</th>
+            <th class="r" style="width:120px;">Material Price</th>
+            <th class="r" style="width:110px;">Total</th>
+            <th style="width:34px;"></th>
+          </tr></thead>
+          <tbody id="tbody-${cid}"></tbody>
+        </table>
+        <div class="card-foot">
+          <button class="add-btn" onclick="addRow('${cid}')">+ Add Row</button>
+          <span class="subtotal-lbl">Subtotal: <strong id="cat-sub-${cid}">$0.00</strong></span>
+        </div>
+      </div>`;
+    area.appendChild(panel);
+  });
+}
+
+function buildResultsPage() {
+  let grand=0, genSum=0, extSum=0, intSum=0;
+  CATS.forEach(c => {
+    let sub=0;
+    state[c.id].rows.forEach(r => {
+      if(r.isContingency){ const p=parseFloat(r.qty); sub += isNaN(p)?0:getContingencyBase()*(p/100); }
+      else sub += rowTotal(r);
+    });
+    grand += sub;
+    if(c.group==='general')  genSum += sub;
+    if(c.group==='exterior') extSum += sub;
+    if(c.group==='interior') intSum += sub;
+  });
+  document.getElementById('res-grand').textContent = fmt(grand);
+  document.getElementById('res-gen').textContent   = fmt(genSum);
+  document.getElementById('res-ext').textContent   = fmt(extSum);
+  document.getElementById('res-int').textContent   = fmt(intSum);
+  document.getElementById('rb-grand').textContent  = fmt(grand);
+  document.getElementById('results-title').textContent = document.getElementById('reportTitle').value || 'Estimate Results';
+
+  const body = document.getElementById('rb-body');
+  body.innerHTML = '';
+  [{key:'general',label:'General Conditions',bc:'gen',cats:GENERAL_CATS},
+   {key:'exterior',label:'Exterior',bc:'ext',cats:EXTERIOR_CATS},
+   {key:'interior',label:'Interior',bc:'int',cats:INTERIOR_CATS}
+  ].forEach(g => {
+    const sec = document.createElement('div');
+    sec.className = 'rb-section'; sec.textContent = g.label;
+    body.appendChild(sec);
+    g.cats.forEach(cid => {
+      const cat = CATS.find(c => c.id===cid); if(!cat) return;
+      let sub=0;
+      state[cid].rows.forEach(r => {
+        if(r.isContingency){ const p=parseFloat(r.qty); sub+=isNaN(p)?0:getContingencyBase()*(p/100); }
+        else sub+=rowTotal(r);
+      });
+      const row = document.createElement('div');
+      row.className = 'rb-row';
+      row.innerHTML = `<span class="rb-cat">${cat.label}</span><span><span class="rb-badge ${g.bc}">${g.label}</span></span><span class="rb-amount${sub===0?' zero':''}">${fmt(sub)}</span>`;
+      body.appendChild(row);
+    });
+  });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function initApp() {
+  loadState();
+  activeTab = GENERAL_CATS[0];
+  buildTabsForStep('general');
+  buildPanelsForStep('general');
+  renderAll();
+  recalcAll();
+  applyStepUI('general');
+  loadTitle();
+  document.getElementById('tabBar').addEventListener('scroll', updateTabScrollBtns);
+}
+
+function loadState() {
+  CATS.forEach(cat => {
+    state[cat.id] = {
+      rows: cat.items.map(it => ({
+        label: it.label||'', unit: it.unit||'LS', qty: it.qty||'',
+        labor:'', material:'', done:false, aiHit:false, isContingency:it.isContingency||false
+      }))
+    };
+  });
+  try {
+    const raw = localStorage.getItem(STORE);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    CATS.forEach(cat => {
+      if (!saved[cat.id]) return;
+      saved[cat.id].rows.forEach((r,i) => {
+        if (!state[cat.id].rows[i]) return;
+        const def = state[cat.id].rows[i];
+        def.qty      = r.qty      !== undefined ? r.qty      : def.qty;
+        def.labor    = r.labor    || '';
+        def.material = r.material || '';
+        def.done     = r.done     || false;
+        def.aiHit    = r.aiHit   || false;
+        def.unit     = r.unit    || def.unit;
+      });
+      // extra user-added rows
+      for (let i = cat.items.length; i < saved[cat.id].rows.length; i++) {
+        const r = saved[cat.id].rows[i];
+        state[cat.id].rows.push({
+          label:r.label||'', unit:r.unit||'LS', qty:r.qty||'',
+          labor:r.labor||'', material:r.material||'',
+          done:r.done||false, aiHit:r.aiHit||false, isContingency:false
+        });
+      }
+    });
+  } catch(e) { localStorage.removeItem(STORE); }
+}
+
+let _persistTimer = null;
+function persist() {
+  clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => localStorage.setItem(STORE, JSON.stringify(state)), 600);
+}
+function persistNow() { clearTimeout(_persistTimer); localStorage.setItem(STORE, JSON.stringify(state)); }
+
+function switchTab(id) {
+  activeTab = id;
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-pill').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-'+id);
+  const tab   = document.getElementById('tab-'+id);
+  if (panel) panel.classList.add('active');
+  if (tab)   tab.classList.add('active');
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderAll() { CATS.forEach(c => renderRows(c.id)); }
+
+function renderRows(cid) {
+  const tbody = document.getElementById('tbody-'+cid);
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  state[cid].rows.forEach((row,i) => tbody.appendChild(mkRow(cid,i,row)));
+}
+
+function mkRow(cid, i, row) {
+  const isC = row.isContingency === true;
+  const unitOpts = UNITS.map(u => `<option value="${u.value}"${row.unit===u.value?' selected':''}>${u.label}</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.className = 'exp-row'+(row.done?' is-done':'')+(isC?' contingency-row':'');
+  tr.id = `r-${cid}-${i}`;
+  if (isC) {
+    tr.innerHTML = `
+      <td class="chk"><input type="checkbox"${row.done?' checked':''} onchange="onDone('${cid}',${i},this.checked)"></td>
+      <td><input class="inp-label" type="text" value="${esc(row.label)}" placeholder="Description…" oninput="onF('${cid}',${i},'label',this.value)"></td>
+      <td><select class="sel-method" disabled><option>Percentage</option></select></td>
+      <td><input class="inp-num" type="number" min="0" max="100" step="0.1" value="${row.qty!==''?row.qty:10}" placeholder="%" oninput="onF('${cid}',${i},'qty',this.value)" title="Percentage of hard costs (Exterior + Interior)"></td>
+      <td><input class="inp-num" type="number" disabled placeholder="—" style="background:#f1f5f9;color:#94a3b8;border-color:transparent;"></td>
+      <td><input class="inp-num" type="number" disabled placeholder="—" style="background:#f1f5f9;color:#94a3b8;border-color:transparent;"></td>
+      <td class="cell-total" id="ct-${cid}-${i}" style="font-weight:800;color:var(--navy);">$0.00</td>
+      <td><button class="del-btn" style="visibility:hidden;">✕</button></td>`;
+  } else {
+    tr.innerHTML = `
+      <td class="chk"><input type="checkbox"${row.done?' checked':''} onchange="onDone('${cid}',${i},this.checked)"></td>
+      <td><input class="inp-label" type="text" value="${esc(row.label)}" placeholder="Description…" oninput="onF('${cid}',${i},'label',this.value)"></td>
+      <td><select class="sel-method" onchange="onUnit('${cid}',${i},this.value)">${unitOpts}</select></td>
+      <td><input class="inp-num" type="number" min="0" value="${row.qty!==''?row.qty:''}" placeholder="Qty" oninput="onF('${cid}',${i},'qty',this.value)"></td>
+      <td><input class="inp-num${row.aiHit?' ai-hit':''}" type="number" min="0" value="${row.labor!==''?row.labor:''}" placeholder="0.00" oninput="onF('${cid}',${i},'labor',this.value)"></td>
+      <td><input class="inp-num${row.aiHit?' ai-hit':''}" type="number" min="0" value="${row.material!==''?row.material:''}" placeholder="0.00" oninput="onF('${cid}',${i},'material',this.value)"></td>
+      <td class="cell-total" id="ct-${cid}-${i}">$0.00</td>
+      <td><button class="del-btn" title="Remove" onclick="delRow('${cid}',${i})">✕</button></td>`;
+  }
+  return tr;
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+// ============================================================
+// EVENTS
+// ============================================================
+function onDone(cid,i,v) {
+  state[cid].rows[i].done = v;
+  const tr = document.getElementById(`r-${cid}-${i}`);
+  if (tr) tr.classList.toggle('is-done', v);
+  recalcAll(); persist();
+}
+function onF(cid,i,field,val) {
+  state[cid].rows[i][field] = val;
+  recalcAll(); persist();
+}
+function onUnit(cid,i,val) { state[cid].rows[i].unit = val; recalcAll(); persist(); }
+function addRow(cid) {
+  state[cid].rows.push({label:'',unit:'LS',qty:'',labor:'',material:'',done:false,aiHit:false,isContingency:false});
+  renderRows(cid); recalcAll(); persist();
+}
+function delRow(cid,i) { state[cid].rows.splice(i,1); renderRows(cid); recalcAll(); persist(); }
+
+// ============================================================
+// FORMULA
+// Total = (Material Price × Labor) + (Quantity × Material Price)
+// Contingency = sum of all Exterior + Interior totals × (qty% ÷ 100)
+// ============================================================
+function rowTotal(row) {
+  if (row.isContingency) return 0; // calculated separately
+  const q = parseFloat(row.qty)      || 0;
+  const l = parseFloat(row.labor)    || 0;
+  const m = parseFloat(row.material) || 0;
+  if (l === 0 && m === 0) return 0;
+  return (m * l) + (q * m);
+}
+
+function getContingencyBase() {
+  let base = 0;
+  [...EXTERIOR_CATS, ...INTERIOR_CATS].forEach(cid => {
+    state[cid].rows.forEach(r => { base += rowTotal(r); });
+  });
+  return base;
+}
+
+function updateRowTotal(cid, i) {
+  const row  = state[cid].rows[i];
+  const cell = document.getElementById(`ct-${cid}-${i}`);
+  if (!cell) return;
+  let t = 0;
+  if (row.isContingency) {
+    const pct = parseFloat(row.qty);
+    t = isNaN(pct) ? 0 : getContingencyBase() * (pct / 100);
+  } else {
+    t = rowTotal(row);
+  }
+  cell.textContent = t > 0 ? fmt(t) : '$0.00';
+  cell.classList.toggle('has-val', t > 0);
+}
+
+function updateCatTotal(cid) {
+  let sum = 0;
+  state[cid].rows.forEach((_,i) => {
+    updateRowTotal(cid, i);
+    const row = state[cid].rows[i];
+    if (row.isContingency) {
+      const pct = parseFloat(row.qty);
+      sum += isNaN(pct) ? 0 : getContingencyBase() * (pct / 100);
+    } else {
+      sum += rowTotal(row);
+    }
+  });
+  const el  = document.getElementById('cat-sub-'+cid);
+  if (el) el.textContent = fmt(sum);
+  const tab = document.getElementById('tab-'+cid);
+  if (tab) { const sub = tab.querySelector('.tp-sub'); if(sub) sub.textContent = sum>0?fmt(sum):''; }
+}
+
+function updateGrand() {
+  let grand=0, genSum=0, extSum=0, intSum=0, doneCount=0;
+  CATS.forEach(c => {
+    state[c.id].rows.forEach(r => {
+      if (r.done) doneCount++;
+      let t = 0;
+      if (r.isContingency) { const p=parseFloat(r.qty); t=isNaN(p)?0:getContingencyBase()*(p/100); }
+      else t = rowTotal(r);
+      grand += t;
+      if(c.group==='general')  genSum += t;
+      if(c.group==='exterior') extSum += t;
+      if(c.group==='interior') intSum += t;
+    });
+  });
+  document.getElementById('grandTotal').textContent = fmt(grand);
+  document.getElementById('genTotal').textContent   = fmt(genSum);
+  document.getElementById('extTotal').textContent   = fmt(extSum);
+  document.getElementById('intTotal').textContent   = fmt(intSum);
+  document.getElementById('doneCount').textContent  = doneCount;
+  document.getElementById('step-sub-gen').textContent = genSum>0?fmt(genSum):'';
+  document.getElementById('step-sub-ext').textContent = extSum>0?fmt(extSum):'';
+  document.getElementById('step-sub-int').textContent = intSum>0?fmt(intSum):'';
+}
+
+function recalcAll() { CATS.forEach(c => updateCatTotal(c.id)); updateGrand(); }
+function fmt(n,d=2) { return '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+// ============================================================
+// RESET / TITLE
+// ============================================================
+function showConfirmModal(title,msg,confirmLabel,onConfirm) {
+  const overlay = document.getElementById('confirmModal');
+  document.getElementById('modalTitle').innerText   = title;
+  document.getElementById('modalMsg').innerText     = msg;
+  document.getElementById('modalConfirm').innerText = confirmLabel;
+  overlay.classList.add('active');
+  document.getElementById('modalConfirm').onclick = () => { overlay.classList.remove('active'); onConfirm(); };
+  document.getElementById('modalCancel').onclick  = () => overlay.classList.remove('active');
+  overlay.onclick = e => { if(e.target===overlay) overlay.classList.remove('active'); };
+}
+function doReset() {
+  showConfirmModal('Reset All Data?','This will clear all your estimates and cannot be undone.','Yes, Reset Everything', () => {
+    localStorage.removeItem(STORE); localStorage.removeItem('reia_title');
+    state = {}; loadState();
+    buildTabsForStep(currentStep); buildPanelsForStep(currentStep);
+    renderAll(); recalcAll();
+    document.getElementById('reportTitle').value = '';
+  });
+}
+function loadTitle() {
+  document.getElementById('reportTitle').value = localStorage.getItem('reia_title')||'';
+  document.getElementById('reportTitle').oninput = function() { localStorage.setItem('reia_title',this.value); };
+}
+
+// ============================================================
+// AI AUTO-FILL
+// ============================================================
+async function doAIFill() {
+  const now = Date.now();
+  const lastCall = parseInt(localStorage.getItem('ai_last_call')||'0');
+  if (now - lastCall < 30000) {
+    const secs = Math.ceil((30000-(now-lastCall))/1000);
+    aiStatus('error',`⚠ Please wait ${secs} more second${secs===1?'':'s'} before fetching prices again.`);
+    return;
+  }
+  localStorage.setItem('ai_last_call', now);
+  const btn = document.getElementById('aiBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin" style="border-color:#fff;border-top-color:transparent"></span> Fetching…';
+
+  // ── Collect all labeled non-contingency rows ──────────────────────────────
+  const items = [];
+  CATS.forEach(cat => {
+    state[cat.id].rows.forEach(row => {
+      if (row.label && !row.isContingency) items.push({cat:cat.label, label:row.label, unit:row.unit});
+    });
+  });
+
+  // ── Split into batches of 30 items — keeps each request fast & reliable ──
+  const BATCH_SIZE = 30;
+  const batches = [];
+  for (let i=0; i<items.length; i+=BATCH_SIZE) batches.push(items.slice(i, i+BATCH_SIZE));
+
+  // ── Fetch helper with 58s timeout ─────────────────────────────────────────
+  async function fetchBatch(batchItems, batchNum) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 58000);
+    try {
+      const res = await fetch(PROXY_URL, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({items: batchItems}),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      return res;
+    } catch(e) {
+      clearTimeout(timer);
+      if (e.name==='AbortError') throw new Error(`Batch ${batchNum} timed out`);
+      throw e;
+    }
+  }
+
+  try {
+    const allPrices = {};
+    let totalCount = 0;
+
+    for (let b=0; b<batches.length; b++) {
+      const batch = batches[b];
+      aiStatus('loading', `Fetching AI prices… batch ${b+1} of ${batches.length} (${Math.round(((b)/batches.length)*100)}% complete)`);
+
+      let res;
+      try {
+        res = await fetchBatch(batch, b+1);
+      } catch(e) {
+        // On timeout, retry this batch once before giving up
+        aiStatus('loading', `Batch ${b+1} timed out — retrying…`);
+        await new Promise(r => setTimeout(r, 2000));
+        res = await fetchBatch(batch, b+1);
+      }
+
+      if (!res.ok) {
+        let errMsg = 'Server error ' + res.status;
+        try { const e = await res.json(); errMsg = e.error || errMsg; } catch(_){}
+        // Rate limit — stop gracefully with what we have so far
+        if (res.status === 429) {
+          aiStatus('error', `⚠ Rate limit reached after ${totalCount} items. Wait a few minutes and try again.`);
+          if (totalCount > 0) { renderAll(); recalcAll(); persistNow(); }
+          btn.disabled=false; btn.innerHTML='<span>✦</span> AI Auto-Fill Prices';
+          return;
+        }
+        throw new Error(errMsg);
+      }
+
+      const data = await res.json();
+      if (data.prices) Object.assign(allPrices, data.prices);
+    }
+
+    // ── Apply all collected prices to state ───────────────────────────────
+    CATS.forEach(cat => {
+      state[cat.id].rows.forEach((row,i) => {
+        if (row.isContingency) return;
+        const key = `${cat.label}|${row.label}`;
+        const p = allPrices[key];
+        if (p) {
+          if (typeof p.labor    === 'number') state[cat.id].rows[i].labor    = p.labor.toFixed(2);
+          if (typeof p.material === 'number') state[cat.id].rows[i].material = p.material.toFixed(2);
+          if (typeof p.qty      === 'number') state[cat.id].rows[i].qty      = p.qty.toString();
+          state[cat.id].rows[i].aiHit = true;
+          totalCount++;
+        }
+      });
+    });
+
+    renderAll(); recalcAll(); persistNow();
+    aiStatus('success', `✓ AI filled ${totalCount} line items with current Utah market prices. Blue-highlighted fields were AI-estimated — review and adjust as needed.`);
+
+  } catch(e) {
+    localStorage.removeItem('ai_last_call'); // allow immediate retry
+    const msg = (e.message.includes('timeout') || e.message.includes('timed out'))
+      ? '⚠ Request timed out — please click "AI Auto-Fill Prices" to try again.'
+      : '⚠ ' + e.message;
+    aiStatus('error', msg);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>✦</span> AI Auto-Fill Prices';
+}
+
+// ============================================================
+// EXCEL EXPORT
+// ============================================================
+function exportExcel() {
+  const wb = XLSX.utils.book_new();
+  const title = document.getElementById('reportTitle').value || 'Rehab Estimate';
+  const summaryRows = [
+    ['Utah REIA – Rehab Estimator'],['Report:',title],
+    ['Date:',new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})],
+    [],[' SECTION','CATEGORY','SUBTOTAL']
+  ];
+  let grandTotal=0;
+  [{label:'General Conditions',cats:GENERAL_CATS},{label:'Exterior',cats:EXTERIOR_CATS},{label:'Interior',cats:INTERIOR_CATS}].forEach(g => {
+    g.cats.forEach(cid => {
+      const cat=CATS.find(c=>c.id===cid); let sub=0;
+      state[cid].rows.forEach(r => {
+        if(r.isContingency){const p=parseFloat(r.qty);sub+=isNaN(p)?0:getContingencyBase()*(p/100);}
+        else sub+=rowTotal(r);
+      });
+      if(sub>0){summaryRows.push([g.label,cat.label,sub]);grandTotal+=sub;}
+    });
+  });
+  summaryRows.push([],['','GRAND TOTAL',grandTotal]);
+  const wsSummary=XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary['!cols']=[{wch:22},{wch:32},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,wsSummary,'Summary');
+
+  CATS.forEach(cat => {
+    const rows=state[cat.id].rows;
+    if(!rows.some(r=>r.label||parseFloat(r.labor)||parseFloat(r.material)||r.isContingency)) return;
+    const sheetRows=[[cat.label.toUpperCase()],[],['Done','Description','Unit of Measure','Quantity','Labor','Material Price','Total']];
+    let catTotal=0;
+    rows.forEach(row => {
+      if(!row.label&&!row.labor&&!row.material&&!row.isContingency) return;
+      let tot=0;
+      if(row.isContingency){const p=parseFloat(row.qty);tot=isNaN(p)?0:getContingencyBase()*(p/100);}
+      else tot=rowTotal(row);
+      catTotal+=tot;
+      const unitLabel=UNITS.find(u=>u.value===row.unit)?.label||row.unit;
+      sheetRows.push([
+        row.done?'Yes':'No', row.label||'', unitLabel,
+        row.isContingency?(row.qty+'%'):(parseFloat(row.qty)||''),
+        row.isContingency?'':(parseFloat(row.labor)||''),
+        row.isContingency?'':(parseFloat(row.material)||''),
+        tot||''
+      ]);
+    });
+    sheetRows.push([],['','','','','','SUBTOTAL:',catTotal]);
+    const ws=XLSX.utils.aoa_to_sheet(sheetRows);
+    ws['!cols']=[{wch:6},{wch:32},{wch:18},{wch:10},{wch:12},{wch:16},{wch:14}];
+    let name=cat.label.replace(/[^a-z0-9 ]/gi,'').substring(0,28);
+    let attempt=name,n=2;
+    while(wb.SheetNames.includes(attempt)) attempt=name+'_'+n++;
+    XLSX.utils.book_append_sheet(wb,ws,attempt||'Sheet'+n);
+  });
+  XLSX.writeFile(wb,(title.replace(/[^a-z0-9]/gi,'_').substring(0,40)||'Rehab_Estimate')+'.xlsx');
+}
+
+let _aiStatusTimer=null;
+
+// ============================================================
+// PRINT
+// ============================================================
+function printCalculator() {
+  const title = document.getElementById('reportTitle').value||'Rehab Estimate';
+  const reportDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  let allHTML='', grand=0, genT=0, extT=0, intT=0;
+
+  [{label:'General Conditions',cats:GENERAL_CATS,badge:'#f3e8ff;color:#6b21a8'},
+   {label:'Exterior',cats:EXTERIOR_CATS,badge:'#fef3c7;color:#92400e'},
+   {label:'Interior',cats:INTERIOR_CATS,badge:'#dbeafe;color:#1e40af'}
+  ].forEach(g => {
+    g.cats.forEach(cid => {
+      const cat=CATS.find(c=>c.id===cid);
+      const rows=state[cid].rows.filter(r=>r.label||parseFloat(r.labor)||parseFloat(r.material)||r.isContingency);
+      if(!rows.length) return;
+      let catTotal=0;
+      const rowsHTML=rows.map(row=>{
+        let tot=0;
+        if(row.isContingency){const p=parseFloat(row.qty);tot=isNaN(p)?0:getContingencyBase()*(p/100);}
+        else tot=rowTotal(row);
+        catTotal+=tot;
+        const uLabel=UNITS.find(u=>u.value===row.unit)?.label||row.unit;
+        const qDisp=row.isContingency?(row.qty+'%'):(row.qty||'');
+        return `<tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:5px 8px;width:22px;">${row.done?'✓':''}</td>
+          <td style="padding:5px 8px;font-weight:500;color:${row.done?'#94a3b8':'#0f2340'}">${row.label||''}</td>
+          <td style="padding:5px 8px;color:#64748b;font-size:0.76rem;">${uLabel}</td>
+          <td style="padding:5px 8px;text-align:right;font-family:monospace;font-size:0.8rem;">${qDisp}</td>
+          <td style="padding:5px 8px;text-align:right;font-family:monospace;font-size:0.8rem;">${row.isContingency?'—':(parseFloat(row.labor)?'$'+parseFloat(row.labor).toLocaleString('en-US',{minimumFractionDigits:2}):'')}</td>
+          <td style="padding:5px 8px;text-align:right;font-family:monospace;font-size:0.8rem;">${row.isContingency?'—':(parseFloat(row.material)?'$'+parseFloat(row.material).toLocaleString('en-US',{minimumFractionDigits:2}):'')}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;font-family:monospace;color:${tot>0?'#1a7a4a':'#94a3b8'}">${tot>0?'$'+tot.toLocaleString('en-US',{minimumFractionDigits:2}):'-'}</td>
+        </tr>`;
+      }).join('');
+      grand+=catTotal;
+      if(cat.group==='general') genT+=catTotal;
+      if(cat.group==='exterior') extT+=catTotal;
+      if(cat.group==='interior') intT+=catTotal;
+      allHTML+=`<div style="margin-bottom:14px;break-inside:avoid;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <h3 style="margin:0;font-size:0.82rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#0f2340;">${cat.label}</h3>
+          <span style="font-size:0.63rem;padding:2px 6px;border-radius:20px;font-weight:600;background:${g.badge}">${g.label}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.78rem;border:1px solid #e2e8f0;">
+          <thead><tr style="background:#f1f5f9;border-bottom:2px solid #e2e8f0;">
+            <th style="padding:5px 8px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#64748b;width:22px;">✓</th>
+            <th style="padding:5px 8px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#64748b;">Description</th>
+            <th style="padding:5px 8px;text-align:left;font-size:0.62rem;text-transform:uppercase;color:#64748b;">Unit</th>
+            <th style="padding:5px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#64748b;">Qty</th>
+            <th style="padding:5px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#64748b;">Labor</th>
+            <th style="padding:5px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#64748b;">Material Price</th>
+            <th style="padding:5px 8px;text-align:right;font-size:0.62rem;text-transform:uppercase;color:#64748b;">Total</th>
+          </tr></thead>
+          <tbody>${rowsHTML}</tbody>
+          <tfoot><tr style="background:#f8fafc;border-top:2px solid #e2e8f0;">
+            <td colspan="6" style="padding:6px 8px;font-weight:700;font-size:0.76rem;color:#475569;">Subtotal</td>
+            <td style="padding:6px 8px;text-align:right;font-weight:800;font-family:monospace;color:#1a7a4a;">$${catTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+    });
+  });
+
+  const fM=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const printHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',sans-serif;color:#0f2340;background:white;padding:22px;font-size:13px;}@media print{body{padding:10px;}@page{margin:1cm;size:A4;}}</style>
+  </head><body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #0f2340;">
+    <div><img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" style="height:34px;margin-bottom:5px;display:block;" alt="Utah REIA">
+    <h1 style="font-size:1.1rem;font-weight:800;color:#0f2340;margin-bottom:2px;">${title}</h1>
+    <p style="font-size:0.72rem;color:#64748b;">Generated: ${reportDate}</p></div>
+    <div style="text-align:right;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:11px 16px;">
+      <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;color:#65a30d;">Grand Total</div>
+      <div style="font-size:1.5rem;font-weight:800;color:#14532d;">${fM(grand)}</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:18px;">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:9px 12px;"><div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:2px;">General</div><div style="font-size:0.95rem;font-weight:800;">${fM(genT)}</div></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:9px 12px;"><div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:2px;">Exterior</div><div style="font-size:0.95rem;font-weight:800;">${fM(extT)}</div></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:9px 12px;"><div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:2px;">Interior</div><div style="font-size:0.95rem;font-weight:800;">${fM(intT)}</div></div>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:9px 12px;"><div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;color:#65a30d;margin-bottom:2px;">Grand Total</div><div style="font-size:0.95rem;font-weight:800;color:#14532d;">${fM(grand)}</div></div>
+  </div>
+  ${allHTML}
+  <div style="margin-top:18px;padding-top:10px;border-top:1px solid #e2e8f0;text-align:center;font-size:0.65rem;color:#94a3b8;">Utah REIA Repair Estimator · ${reportDate} · All figures are estimates only</div>
+  </body></html>`;
+
+  const pw=window.open('','_blank','width=960,height=720,scrollbars=yes');
+  if(!pw){alert('Pop-up blocked! Please allow pop-ups for this page and try again.');return;}
+  pw.document.write(printHTML); pw.document.close();
+  pw.onload=()=>{setTimeout(()=>{pw.focus();pw.print();pw.onafterprint=()=>pw.close();},400);};
+}
+
+function aiStatus(type,msg) {
+  const bar=document.getElementById('aiStatusBar');
+  if(_aiStatusTimer){clearTimeout(_aiStatusTimer);_aiStatusTimer=null;}
+  bar.className=type; bar.style.display='flex';
+  document.getElementById('aiStatusTxt').innerText=msg;
+  if(type!=='loading'){_aiStatusTimer=setTimeout(()=>{bar.style.display='none';bar.className='';_aiStatusTimer=null;},9000);}
+}
+
+
+// ============================================================
+// TAB BAR SCROLL ARROWS
+// ============================================================
+function scrollTabBar(dir) {
+  const bar = document.getElementById('tabBar');
+  bar.scrollBy({ left: dir * 200, behavior: 'smooth' });
+  setTimeout(updateTabScrollBtns, 250);
+}
+function updateTabScrollBtns() {
+  const bar = document.getElementById('tabBar');
+  const btnL = document.getElementById('tabScrollLeft');
+  const btnR = document.getElementById('tabScrollRight');
+  if (!bar || !btnL || !btnR) return;
+  const canScrollLeft  = bar.scrollLeft > 2;
+  const canScrollRight = bar.scrollLeft < bar.scrollWidth - bar.clientWidth - 2;
+  btnL.classList.toggle('hidden', !canScrollLeft);
+  btnR.classList.toggle('hidden', !canScrollRight);
+}
+// ============================================================
+// GATE
+// ============================================================
+(function() {
+  const GATE_KEY = 'utah_reia_access';
+  const PREFIX   = 'ureia_';
+  function isValidToken(t) {
+    if (!t||!t.startsWith(PREFIX)) return false;
+    try {
+      const parts = t.split('_');
+      if (parts.length < 2) return false;
+      const exp = parseInt(parts[1]);
+      if (isNaN(exp)) return false;
+      if (Date.now() > exp) { localStorage.removeItem(GATE_KEY); return false; }
+      return true;
+    } catch(e) { return false; }
+  }
+
+  if (isValidToken(localStorage.getItem(GATE_KEY))) { show(); return; }
+
+  document.getElementById('gateBtn').addEventListener('click', async function() {
+    const inp = document.getElementById('gatePhone');
+    const msg = document.getElementById('gateMessage');
+    const phone = inp.value.replace(/\D/g,'');
+    msg.style.color = 'var(--red)';
+    if (phone.length < 10) { msg.innerText='Please enter a valid 10-digit phone number.'; inp.style.borderColor='var(--red)'; return; }
+    const captchaToken = grecaptcha ? grecaptcha.getResponse() : '';
+    if (!captchaToken) { msg.innerText="Please complete the 'I am not a robot' verification."; return; }
+    msg.innerText='Verifying…';
+    document.getElementById('gateBtn').disabled=true;
+    try {
+      const r = await fetch('https://rehab-estimator-delta.vercel.app/api/verify-phone',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({phone,captcha:captchaToken})
+      });
+      if(!r.ok) throw new Error('Server error '+r.status);
+      const d = await r.json();
+      if (d.valid) {
+        localStorage.setItem(GATE_KEY, d.token||(PREFIX+d.expiresAt+'_ok'));
+        show();
+      } else {
+        msg.innerText = d.message||'Phone number not found. Access denied.';
+        inp.style.borderColor='var(--red)';
+        if(window.grecaptcha) grecaptcha.reset();
+      }
+    } catch(e) {
+      msg.innerText='Verification failed. Please check your connection and try again.';
+      if(window.grecaptcha) grecaptcha.reset();
+    } finally { document.getElementById('gateBtn').disabled=false; }
+  });
+
+  function show() {
+    document.getElementById('gateWrap').style.display='none';
+    document.getElementById('appWrap').style.display='flex';
+    initApp();
+  }
+})();
+</script>
+</body>
+</html>
