@@ -76,9 +76,9 @@
   .tab-scroll-btn.right{border-left:1px solid var(--border);z-index:4;}
   .tab-bar{flex:1;display:flex;overflow-x:auto;padding:0 4px;scrollbar-width:none;scroll-behavior:smooth;}
   .tab-bar::-webkit-scrollbar{display:none;}
-  .tab-pill{padding:11px 14px;border:none;background:none;cursor:pointer;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--slate-light);white-space:nowrap;border-bottom:3px solid transparent;font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;gap:1px;}
-  .tab-pill.active{color:var(--navy);border-bottom-color:var(--green);}
-  .tab-pill .tp-sub{font-size:0.62rem;font-weight:500;color:var(--green);font-variant-numeric:tabular-nums;min-height:10px;}
+  .tab-pill{padding:11px 14px;border:none;background:none;cursor:pointer;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--slate-light);white-space:nowrap;border-bottom:4px solid transparent;margin-bottom:-1px;font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;gap:1px;}
+  .tab-pill.active{color:#fff;border-bottom:4px solid #0d5c35;margin-bottom:-1px;background:var(--green);border-radius:6px 6px 0 0;}
+  .tab-pill .tp-sub{font-size:0.62rem;font-weight:500;color:var(--green);font-variant-numeric:tabular-nums;min-height:10px;} .tab-pill.active .tp-sub{color:rgba(255,255,255,0.85);}
 
   /* PANELS */
   .panels-area{flex:1;padding:20px;}
@@ -693,7 +693,9 @@ function loadState() {
   CATS.forEach(cat => {
     state[cat.id] = {
       rows: cat.items.map(it => ({
-        label: it.label||'', unit: it.unit||'LS', qty: it.qty||'',
+        label: it.label||'', unit: it.unit||'LS',
+        // Contingency defaults to 10%, regular rows default to blank
+        qty: it.isContingency ? (it.qty||'10') : (it.qty||''),
         labor:'', material:'', done:false, aiHit:false, isContingency:it.isContingency||false
       }))
     };
@@ -766,10 +768,21 @@ function mkRow(cid, i, row) {
     tr.innerHTML = `
       <td class="chk"><input type="checkbox"${row.done?' checked':''} onchange="onDone('${cid}',${i},this.checked)"></td>
       <td><input class="inp-label" type="text" value="${esc(row.label)}" placeholder="Description…" oninput="onF('${cid}',${i},'label',this.value)"></td>
-      <td><select class="sel-method" disabled><option>Percentage</option></select></td>
-      <td><input class="inp-num" type="number" min="0" max="100" step="0.1" value="${row.qty!==''?row.qty:10}" placeholder="%" oninput="onF('${cid}',${i},'qty',this.value)" title="Percentage of hard costs (Exterior + Interior)"></td>
-      <td><input class="inp-num" type="number" disabled placeholder="—" style="background:#f1f5f9;color:#94a3b8;border-color:transparent;"></td>
-      <td><input class="inp-num" type="number" disabled placeholder="—" style="background:#f1f5f9;color:#94a3b8;border-color:transparent;"></td>
+      <td style="text-align:center;font-size:0.78rem;font-weight:700;color:var(--slate);letter-spacing:0.04em;">%</td>
+      <td style="position:relative;">
+        <div style="display:flex;align-items:center;gap:2px;">
+          <input class="inp-num" type="number" min="0" max="100" step="0.1"
+            value="${row.qty!==''?row.qty:'10'}"
+            placeholder="10"
+            oninput="onF('${cid}',${i},'qty',this.value)"
+            title="Percentage of (Exterior + Interior) hard costs"
+            style="flex:1;min-width:0;">
+          <span style="font-size:0.82rem;font-weight:700;color:var(--slate);padding-right:2px;">%</span>
+        </div>
+      </td>
+      <td style="text-align:center;font-size:0.75rem;color:var(--slate-light);font-style:italic;padding:0 6px;" colspan="2">
+        (Exterior + Interior) × qty%
+      </td>
       <td class="cell-total" id="ct-${cid}-${i}" style="font-weight:800;color:var(--navy);">$0.00</td>
       <td><button class="del-btn" style="visibility:hidden;">✕</button></td>`;
   } else {
@@ -799,7 +812,11 @@ function onDone(cid,i,v) {
 }
 function onF(cid,i,field,val) {
   state[cid].rows[i][field] = val;
-  recalcAll(); persist();
+  // Update this specific row's total cell immediately for instant feedback
+  updateRowTotal(cid, i);
+  // Then recalc everything (category subtotal, grand total, step totals)
+  recalcAll();
+  persist();
 }
 function onUnit(cid,i,val) { state[cid].rows[i].unit = val; recalcAll(); persist(); }
 function addRow(cid) {
@@ -810,7 +827,8 @@ function delRow(cid,i) { state[cid].rows.splice(i,1); renderRows(cid); recalcAll
 
 // ============================================================
 // FORMULA
-// Total = (Material Price × Labor) + (Quantity × Material Price)
+// Total = (Labor × Quantity) + (Quantity × Material Price)
+//       = Quantity × (Labor + Material Price)
 // Contingency = sum of all Exterior + Interior totals × (qty% ÷ 100)
 // ============================================================
 function rowTotal(row) {
@@ -819,7 +837,8 @@ function rowTotal(row) {
   const l = parseFloat(row.labor)    || 0;
   const m = parseFloat(row.material) || 0;
   if (l === 0 && m === 0) return 0;
-  return (m * l) + (q * m);
+  // Formula: (Labor × Qty) + (Qty × Material Price)
+  return (l * q) + (q * m);
 }
 
 function getContingencyBase() {
@@ -941,75 +960,74 @@ async function doAIFill() {
     });
   });
 
-  // ── Split into batches of 30 items — keeps each request fast & reliable ──
-  const BATCH_SIZE = 30;
-  const batches = [];
-  for (let i=0; i<items.length; i+=BATCH_SIZE) batches.push(items.slice(i, i+BATCH_SIZE));
-
-  // ── Fetch helper with 58s timeout ─────────────────────────────────────────
-  async function fetchBatch(batchItems, batchNum) {
+  // ── Single API call — all items in one request (avoids rate limits) ────────
+  // Exponential backoff on 429: wait 3s → 6s → 12s then give up
+  async function fetchWithBackoff(allItems, attempt=1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 58000);
     try {
       const res = await fetch(PROXY_URL, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({items: batchItems}),
+        body: JSON.stringify({items: allItems}),
         signal: controller.signal
       });
       clearTimeout(timer);
       return res;
     } catch(e) {
       clearTimeout(timer);
-      if (e.name==='AbortError') throw new Error(`Batch ${batchNum} timed out`);
+      if (e.name==='AbortError') throw new Error('Request timed out. Please try again.');
       throw e;
     }
   }
 
   try {
-    const allPrices = {};
-    let totalCount = 0;
+    aiStatus('loading', `Sending ${items.length} items to AI for pricing — this takes 20–40 seconds, please wait…`);
 
-    for (let b=0; b<batches.length; b++) {
-      const batch = batches[b];
-      aiStatus('loading', `Fetching AI prices… batch ${b+1} of ${batches.length} (${Math.round(((b)/batches.length)*100)}% complete)`);
+    let res;
+    let attempt = 1;
+    const maxAttempts = 3;
 
-      let res;
-      try {
-        res = await fetchBatch(batch, b+1);
-      } catch(e) {
-        // On timeout, retry this batch once before giving up
-        aiStatus('loading', `Batch ${b+1} timed out — retrying…`);
-        await new Promise(r => setTimeout(r, 2000));
-        res = await fetchBatch(batch, b+1);
+    while (attempt <= maxAttempts) {
+      res = await fetchWithBackoff(items, attempt);
+
+      if (res.status === 429) {
+        // Rate limited — exponential backoff: 3s, 6s, 12s
+        if (attempt >= maxAttempts) {
+          aiStatus('error', '⚠ OpenAI rate limit reached. Please wait 1–2 minutes then try again.');
+          btn.disabled=false; btn.innerHTML='<span>✦</span> AI Auto-Fill Prices';
+          localStorage.removeItem('ai_last_call');
+          return;
+        }
+        const waitSec = Math.pow(2, attempt) + 1; // 3s, 5s, 9s
+        aiStatus('loading', `Rate limit hit — waiting ${waitSec} seconds before retry (attempt ${attempt} of ${maxAttempts})…`);
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        attempt++;
+        continue;
       }
 
       if (!res.ok) {
         let errMsg = 'Server error ' + res.status;
         try { const e = await res.json(); errMsg = e.error || errMsg; } catch(_){}
-        // Rate limit — stop gracefully with what we have so far
-        if (res.status === 429) {
-          aiStatus('error', `⚠ Rate limit reached after ${totalCount} items. Wait a few minutes and try again.`);
-          if (totalCount > 0) { renderAll(); recalcAll(); persistNow(); }
-          btn.disabled=false; btn.innerHTML='<span>✦</span> AI Auto-Fill Prices';
-          return;
-        }
         throw new Error(errMsg);
       }
 
-      const data = await res.json();
-      if (data.prices) Object.assign(allPrices, data.prices);
+      break; // success — exit retry loop
     }
 
-    // ── Apply all collected prices to state ───────────────────────────────
+    const data = await res.json();
+    if (!data.prices) throw new Error('No prices returned from AI.');
+
+    // ── Apply prices to state ─────────────────────────────────────────────
+    let totalCount = 0;
     CATS.forEach(cat => {
       state[cat.id].rows.forEach((row,i) => {
         if (row.isContingency) return;
         const key = `${cat.label}|${row.label}`;
-        const p = allPrices[key];
+        const p = data.prices[key];
         if (p) {
           if (typeof p.labor    === 'number') state[cat.id].rows[i].labor    = p.labor.toFixed(2);
           if (typeof p.material === 'number') state[cat.id].rows[i].material = p.material.toFixed(2);
-          if (typeof p.qty      === 'number') state[cat.id].rows[i].qty      = p.qty.toString();
+          // qty intentionally NOT set — user must enter quantity manually
           state[cat.id].rows[i].aiHit = true;
           totalCount++;
         }
@@ -1020,7 +1038,7 @@ async function doAIFill() {
     aiStatus('success', `✓ AI filled ${totalCount} line items with current Utah market prices. Blue-highlighted fields were AI-estimated — review and adjust as needed.`);
 
   } catch(e) {
-    localStorage.removeItem('ai_last_call'); // allow immediate retry
+    localStorage.removeItem('ai_last_call');
     const msg = (e.message.includes('timeout') || e.message.includes('timed out'))
       ? '⚠ Request timed out — please click "AI Auto-Fill Prices" to try again.'
       : '⚠ ' + e.message;
@@ -1367,12 +1385,15 @@ function initTabScrollObserver() {
   });
 
   function show() {
+    // Clear saved calculator state on every new verification — fresh start each session
+    // (User's work is not preserved across logins — they must use Export Excel to save)
+    localStorage.removeItem('utah_reia_v6');
+    localStorage.removeItem('reia_title');
     document.getElementById('gateWrap').style.display = 'none';
     document.getElementById('appWrap').style.display  = 'flex';
     initApp();
     startActivityTracking();
     startIdlePoller();
-    // Record session start
     touchActivity();
   }
 })();

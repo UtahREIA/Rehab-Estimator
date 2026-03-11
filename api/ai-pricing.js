@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
 
-  // ── CORS ─────────────────────────────────────────────────────────────────
+  // ── CORS ──────────────────────────────────────────────────────────────────
   const origin = req.headers.origin || "";
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
     .split(",").map(o => o.trim()).filter(Boolean);
@@ -26,26 +26,29 @@ export default async function handler(req, res) {
     req.socket?.remoteAddress ||
     "unknown";
 
-  // ── RATE LIMITING — 10 calls/hour per IP ─────────────────────────────────
+  // ── RATE LIMITING — 3 calls/hour per IP ──────────────────────────────────
+  // Now that frontend sends 1 request (not 6), 3/hr is plenty for legitimate use
   if (!global._aiRateMap) global._aiRateMap = new Map();
   const now = Date.now();
   const windowMs = 60 * 60 * 1000;
-  const maxCalls = 10;
+  const maxCalls = 3;
   const record = global._aiRateMap.get(ip) || { count: 0, resetAt: now + windowMs };
   if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
   record.count++;
   global._aiRateMap.set(ip, record);
   if (record.count > maxCalls) {
     const minsLeft = Math.ceil((record.resetAt - now) / 60000);
-    console.warn(`[RATE LIMIT] AI endpoint — IP: ${ip}, calls: ${record.count}`);
-    return res.status(429).json({ error: `Rate limit exceeded. Try again in ${minsLeft} minute${minsLeft === 1 ? "" : "s"}.` });
+    console.warn(`[RATE LIMIT] IP: ${ip}, calls: ${record.count}`);
+    return res.status(429).json({
+      error: `Rate limit exceeded. You can use AI Auto-Fill up to 3 times per hour. Try again in ${minsLeft} minute${minsLeft === 1 ? "" : "s"}.`
+    });
   }
 
   // ── API KEY ───────────────────────────────────────────────────────────────
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "Server configuration error." });
 
-  // ── INPUT VALIDATION & SANITIZATION ──────────────────────────────────────
+  // ── INPUT VALIDATION ──────────────────────────────────────────────────────
   const { items } = req.body;
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "Invalid request body." });
@@ -70,33 +73,32 @@ export default async function handler(req, res) {
     origin: origin || "unknown"
   }));
 
-  // ── BUILD PROMPTS ─────────────────────────────────────────────────────────
+  // ── PROMPTS ───────────────────────────────────────────────────────────────
   const systemPrompt =
     `You are a Utah construction cost estimator (Salt Lake City / Utah County, Q1 2025 rates). ` +
-    `You ONLY output raw JSON — no markdown, no code fences, no explanation, no extra text of any kind. ` +
-    `Your output must start with { and end with } and be valid JSON parseable by JSON.parse().`;
+    `Output ONLY raw valid JSON — no markdown, no code fences, no explanation. ` +
+    `Start with { and end with }.`;
 
+  // Compact item list — minimise tokens
   const itemLines = cleanItems.map((it, idx) =>
-    `${idx + 1}. key="${it.cat}|${it.label}" unit=${it.unit}`
+    `${idx + 1}. "${it.cat}|${it.label}" [${it.unit}]`
   ).join("\n");
 
   const userPrompt =
-    `Price each item below for a mid-range Utah contractor. ` +
-    `Return EXACTLY this JSON structure, one entry per item:\n` +
-    `{"prices":{"<key>":{"labor":<number>,"material":<number>,"qty":<number>}}}\n\n` +
+    `Return mid-range Utah contractor prices for every item below.\n` +
+    `JSON format: {"prices":{"<key>":{"labor":<number>,"material":<number>}}}\n\n` +
     `Rules:\n` +
-    `- labor: cost of labor per unit (number only, no $ or commas)\n` +
-    `- material: cost of materials per unit (number only, no $ or commas)\n` +
-    `- qty: typical default quantity (e.g. 1200 for SF paint, 1 for EA/LS, 40 for LF gutters)\n` +
-    `- For LS items: labor = full contractor lump sum, material = 0, qty = 1\n` +
-    `- Units: SF=per sqft, LF=per linear ft, EA=per item, LS=lump sum, SQ=per 100sqft, CY=per cubic yard, HR=per hour\n` +
-    `- Use the EXACT key string shown (including the | separator)\n\n` +
+    `- labor = labor cost per unit, material = material cost per unit\n` +
+    `- Numbers only (no $, no commas)\n` +
+    `- LS items: labor = full lump sum, material = 0\n` +
+    `- Units: SF=sqft, LF=linear ft, EA=each, LS=lump sum, SQ=100sqft, CY=cubic yard, HR=hour\n` +
+    `- Use exact key string (with | separator)\n\n` +
     `Items:\n${itemLines}`;
 
   // ── OPENAI CALL ───────────────────────────────────────────────────────────
-  const OPENAI_TIMEOUT_MS = 55000;
+  const TIMEOUT_MS = 55000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -111,11 +113,9 @@ export default async function handler(req, res) {
           { role: "system", content: systemPrompt },
           { role: "user",   content: userPrompt   }
         ],
-        max_tokens: 6000,
+        max_tokens: 8000,   // enough for 175 items × ~40 tokens each
         temperature: 0,
         seed: 42,
-        // response_format json_object forces the model to ONLY output valid JSON —
-        // eliminates markdown fences, preamble text, and all other non-JSON output
         response_format: { type: "json_object" }
       }),
       signal: controller.signal
@@ -126,25 +126,25 @@ export default async function handler(req, res) {
     if (!openaiRes.ok) {
       const errData = await openaiRes.json().catch(() => ({}));
       console.error("[OPENAI ERROR]", JSON.stringify(errData));
+      // Pass 429 back so frontend can show proper rate limit message
+      if (openaiRes.status === 429) {
+        return res.status(429).json({ error: "OpenAI rate limit reached. Please wait 1–2 minutes and try again." });
+      }
       return res.status(502).json({ error: "AI service error. Please try again." });
     }
 
     const data = await openaiRes.json();
     let text = (data?.choices?.[0]?.message?.content || "").trim();
 
-    // Strip any accidental markdown fences (safety net — json_object mode shouldn't produce these)
-    text = text
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```\s*$/, "")
-      .trim();
+    // Strip any accidental fences
+    text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
 
-    // If somehow the response doesn't start with {, extract the first JSON block
+    // Extract JSON block if response doesn't start with {
     if (!text.startsWith("{")) {
       const match = text.match(/\{[\s\S]*\}/);
-      if (match) {
-        text = match[0];
-      } else {
-        console.error("[NO JSON FOUND] Raw:", text.substring(0, 300));
+      if (match) text = match[0];
+      else {
+        console.error("[NO JSON FOUND]", text.substring(0, 200));
         return res.status(502).json({ error: "AI returned invalid data. Please try again." });
       }
     }
@@ -153,7 +153,7 @@ export default async function handler(req, res) {
     try {
       parsed = JSON.parse(text);
     } catch (e) {
-      // Last resort: try to repair truncated JSON by closing unclosed braces
+      // Try to repair truncated JSON
       try {
         let fixed = text.replace(/,\s*\}/g, "}").replace(/,\s*\]/g, "]");
         const opens  = (fixed.match(/\{/g) || []).length;
@@ -162,24 +162,22 @@ export default async function handler(req, res) {
         parsed = JSON.parse(fixed);
         console.warn("[JSON REPAIRED] Auto-fixed truncated response");
       } catch (e2) {
-        console.error("[JSON PARSE FAILED] text:", text.substring(0, 300));
+        console.error("[JSON PARSE FAILED]", text.substring(0, 200));
         return res.status(502).json({ error: "AI returned invalid data. Please try again." });
       }
     }
 
     if (!parsed || typeof parsed.prices !== "object") {
-      console.error("[BAD FORMAT] Keys received:", Object.keys(parsed || {}));
       return res.status(502).json({ error: "AI returned unexpected format. Please try again." });
     }
 
-    // Coerce all values to numbers (guard against AI returning string values like "$45.00")
+    // Coerce all values to clean numbers
     const sanitizedPrices = {};
     for (const [key, val] of Object.entries(parsed.prices)) {
       if (val && typeof val === "object") {
         sanitizedPrices[key] = {
-          labor:    parseFloat(String(val.labor).replace(/[^0-9.]/g, ""))    || 0,
-          material: parseFloat(String(val.material).replace(/[^0-9.]/g, "")) || 0,
-          qty:      parseFloat(String(val.qty).replace(/[^0-9.]/g, ""))      || 1
+          labor:    parseFloat(String(val.labor   || "0").replace(/[^0-9.]/g, "")) || 0,
+          material: parseFloat(String(val.material|| "0").replace(/[^0-9.]/g, "")) || 0
         };
       }
     }
@@ -195,7 +193,7 @@ export default async function handler(req, res) {
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      console.error("[TIMEOUT] AI request exceeded", OPENAI_TIMEOUT_MS / 1000, "s");
+      console.error("[TIMEOUT]", TIMEOUT_MS / 1000, "s exceeded");
       return res.status(504).json({ error: "Request timed out. Please try again." });
     }
     console.error("[PROXY ERROR]", err.message);
