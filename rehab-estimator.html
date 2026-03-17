@@ -904,6 +904,18 @@ function updateGrand() {
   document.getElementById('step-sub-gen').textContent = genSum>0?fmt(genSum):'';
   document.getElementById('step-sub-ext').textContent = extSum>0?fmt(extSum):'';
   document.getElementById('step-sub-int').textContent = intSum>0?fmt(intSum):'';
+
+  // ── Export totals for BRRRR Calculator import ─────────────────────────────
+  try {
+    localStorage.setItem('ureia_rehab_export', JSON.stringify({
+      grandTotal: grand,
+      general: genSum,
+      exterior: extSum,
+      interior: intSum,
+      title: (document.getElementById('reportTitle') || {}).value || '',
+      updatedAt: Date.now()
+    }));
+  } catch(e) {}
 }
 
 function recalcAll() { CATS.forEach(c => updateCatTotal(c.id)); updateGrand(); }
