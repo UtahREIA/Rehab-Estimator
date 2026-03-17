@@ -687,6 +687,7 @@ function initApp() {
   loadTitle();
   document.getElementById('tabBar').addEventListener('scroll', updateTabScrollBtns);
   initTabScrollObserver();
+  window._rehabAppReady = true; // allow export to localStorage after init completes
 }
 
 function loadState() {
@@ -906,6 +907,8 @@ function updateGrand() {
   document.getElementById('step-sub-int').textContent = intSum>0?fmt(intSum):'';
 
   // ── Export totals for BRRRR Calculator import ─────────────────────────────
+  // Only write after app is fully initialised — prevents login wipe from stamping $0
+  if (!window._rehabAppReady) return;
   try {
     localStorage.setItem('ureia_rehab_export', JSON.stringify({
       grandTotal: grand,
@@ -1308,6 +1311,7 @@ function initTabScrollObserver() {
     localStorage.removeItem('utah_reia_v6');
     localStorage.removeItem('reia_title');
     localStorage.removeItem('ureia_rehab_export');
+    window._rehabAppReady = false;
     document.getElementById('gateWrap').style.display = 'none';
     document.getElementById('appWrap').style.display  = 'flex';
     initApp();
