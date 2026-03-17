@@ -960,66 +960,62 @@ async function doAIFill() {
     });
   });
 
-  // ── Split into batches of 30 items — keeps each request fast & reliable ──
-  const BATCH_SIZE = 30;
-  const batches = [];
-  for (let i=0; i<items.length; i+=BATCH_SIZE) batches.push(items.slice(i, i+BATCH_SIZE));
+  // ── Split into 2 batches (~88 each) — each takes ~15-20s, safe within 55s limit ──
+  const mid = Math.ceil(items.length / 2);
+  const batches = [items.slice(0, mid), items.slice(mid)];
 
-  // ── Fetch helper with 58s timeout ─────────────────────────────────────────
-  async function fetchBatch(batchItems, batchNum) {
+  // ── Fetch one batch with 52s timeout and 429 exponential backoff ──────────
+  async function fetchBatch(batchItems, batchNum, attempt=1) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 58000);
+    const timer = setTimeout(() => controller.abort(), 52000);
+    let res;
     try {
-      const res = await fetch(PROXY_URL, {
+      res = await fetch(PROXY_URL, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({items: batchItems}),
         signal: controller.signal
       });
       clearTimeout(timer);
-      return res;
     } catch(e) {
       clearTimeout(timer);
-      if (e.name==='AbortError') throw new Error(`Batch ${batchNum} timed out`);
+      if (e.name==='AbortError') throw new Error('Request timed out — the AI took too long. Please try again.');
       throw e;
     }
+
+    // Handle rate limit with exponential backoff
+    if (res.status === 429) {
+      if (attempt >= 3) {
+        aiStatus('error', '⚠ OpenAI rate limit reached. Please wait 1–2 minutes then try again.');
+        throw new Error('RATE_LIMIT');
+      }
+      const waitSec = Math.pow(2, attempt) + 1;
+      aiStatus('loading', `Rate limit hit — waiting ${waitSec}s before retry…`);
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+      return fetchBatch(batchItems, batchNum, attempt + 1);
+    }
+
+    if (!res.ok) {
+      let errMsg = 'Server error ' + res.status;
+      try { const e = await res.json(); errMsg = e.error || errMsg; } catch(_){}
+      throw new Error(errMsg);
+    }
+    return res;
   }
 
   try {
     const allPrices = {};
-    let totalCount = 0;
 
-    for (let b=0; b<batches.length; b++) {
-      const batch = batches[b];
-      aiStatus('loading', `Fetching AI prices… batch ${b+1} of ${batches.length} (${Math.round(((b)/batches.length)*100)}% complete)`);
-
-      let res;
-      try {
-        res = await fetchBatch(batch, b+1);
-      } catch(e) {
-        // On timeout, retry this batch once before giving up
-        aiStatus('loading', `Batch ${b+1} timed out — retrying…`);
-        await new Promise(r => setTimeout(r, 2000));
-        res = await fetchBatch(batch, b+1);
-      }
-
-      if (!res.ok) {
-        let errMsg = 'Server error ' + res.status;
-        try { const e = await res.json(); errMsg = e.error || errMsg; } catch(_){}
-        // Rate limit — stop gracefully with what we have so far
-        if (res.status === 429) {
-          aiStatus('error', `⚠ Rate limit reached after ${totalCount} items. Wait a few minutes and try again.`);
-          if (totalCount > 0) { renderAll(); recalcAll(); persistNow(); }
-          btn.disabled=false; btn.innerHTML='<span>✦</span> AI Auto-Fill Prices';
-          return;
-        }
-        throw new Error(errMsg);
-      }
-
+    for (let b = 0; b < batches.length; b++) {
+      aiStatus('loading', `Fetching AI prices — part ${b+1} of ${batches.length} (${Math.round(b/batches.length*100)}% done)… please wait.`);
+      const res  = await fetchBatch(batches[b], b+1);
       const data = await res.json();
       if (data.prices) Object.assign(allPrices, data.prices);
+      // Brief pause between batches to avoid rate limit
+      if (b < batches.length - 1) await new Promise(r => setTimeout(r, 800));
     }
 
-    // ── Apply all collected prices to state ───────────────────────────────
+    // ── Apply ALL prices to state ─────────────────────────────────────────
+    let totalCount = 0;
     CATS.forEach(cat => {
       state[cat.id].rows.forEach((row,i) => {
         if (row.isContingency) return;
@@ -1035,15 +1031,26 @@ async function doAIFill() {
       });
     });
 
-    renderAll(); recalcAll(); persistNow();
-    aiStatus('success', `✓ AI filled ${totalCount} line items with current Utah market prices. Blue-highlighted fields were AI-estimated — review and adjust as needed.`);
+    // ── Re-render ALL panels so every tab shows updated prices ───────────
+    // renderAll() only updates visible tbodies — rebuild all panels to force
+    // every tab to reflect the new state values in their input fields
+    buildPanelsForStep(currentStep);
+    renderAll();
+    recalcAll();
+    persistNow();
+
+    aiStatus('success', `✓ AI filled ${totalCount} line items with Utah market prices. Blue = AI-estimated — review and adjust as needed.`);
 
   } catch(e) {
-    localStorage.removeItem('ai_last_call'); // allow immediate retry
-    const msg = (e.message.includes('timeout') || e.message.includes('timed out'))
-      ? '⚠ Request timed out — please click "AI Auto-Fill Prices" to try again.'
-      : '⚠ ' + e.message;
-    aiStatus('error', msg);
+    if (e.message !== 'RATE_LIMIT') {
+      localStorage.removeItem('ai_last_call');
+      const msg = (e.message.includes('timeout') || e.message.includes('timed out'))
+        ? '⚠ Request timed out — the AI took too long. Please click "AI Auto-Fill Prices" to try again.'
+        : '⚠ ' + e.message;
+      aiStatus('error', msg);
+    } else {
+      localStorage.removeItem('ai_last_call');
+    }
   }
 
   btn.disabled = false;

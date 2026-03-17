@@ -26,12 +26,11 @@ export default async function handler(req, res) {
     req.socket?.remoteAddress ||
     "unknown";
 
-  // ── RATE LIMITING — 3 calls/hour per IP ──────────────────────────────────
-  // Now that frontend sends 1 request (not 6), 3/hr is plenty for legitimate use
+  // ── RATE LIMITING — 6 calls/hour per IP (2 batches × 3 clicks) ───────────
   if (!global._aiRateMap) global._aiRateMap = new Map();
   const now = Date.now();
   const windowMs = 60 * 60 * 1000;
-  const maxCalls = 3;
+  const maxCalls = 6;
   const record = global._aiRateMap.get(ip) || { count: 0, resetAt: now + windowMs };
   if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
   record.count++;
@@ -40,7 +39,7 @@ export default async function handler(req, res) {
     const minsLeft = Math.ceil((record.resetAt - now) / 60000);
     console.warn(`[RATE LIMIT] IP: ${ip}, calls: ${record.count}`);
     return res.status(429).json({
-      error: `Rate limit exceeded. You can use AI Auto-Fill up to 3 times per hour. Try again in ${minsLeft} minute${minsLeft === 1 ? "" : "s"}.`
+      error: `Rate limit exceeded. Try again in ${minsLeft} minute${minsLeft === 1 ? "" : "s"}.`
     });
   }
 
@@ -53,8 +52,8 @@ export default async function handler(req, res) {
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "Invalid request body." });
   }
-  if (items.length > 300) {
-    return res.status(400).json({ error: "Too many items in request." });
+  if (items.length > 150) {
+    return res.status(400).json({ error: "Too many items. Max 150 per batch." });
   }
 
   const cleanItems = items.map(it => ({
@@ -75,28 +74,24 @@ export default async function handler(req, res) {
 
   // ── PROMPTS ───────────────────────────────────────────────────────────────
   const systemPrompt =
-    `You are a Utah construction cost estimator (Salt Lake City / Utah County, Q1 2025 rates). ` +
-    `Output ONLY raw valid JSON — no markdown, no code fences, no explanation. ` +
-    `Start with { and end with }.`;
+    `You are a Utah construction cost database (Salt Lake City/Utah County, Q1 2025). ` +
+    `Output ONLY valid JSON — no markdown, no explanation, no extra text. ` +
+    `Every response must start with { and be parseable by JSON.parse().`;
 
-  // Compact item list — minimise tokens
   const itemLines = cleanItems.map((it, idx) =>
     `${idx + 1}. "${it.cat}|${it.label}" [${it.unit}]`
   ).join("\n");
 
   const userPrompt =
-    `Return mid-range Utah contractor prices for every item below.\n` +
-    `JSON format: {"prices":{"<key>":{"labor":<number>,"material":<number>}}}\n\n` +
-    `Rules:\n` +
-    `- labor = labor cost per unit, material = material cost per unit\n` +
-    `- Numbers only (no $, no commas)\n` +
-    `- LS items: labor = full lump sum, material = 0\n` +
-    `- Units: SF=sqft, LF=linear ft, EA=each, LS=lump sum, SQ=100sqft, CY=cubic yard, HR=hour\n` +
-    `- Use exact key string (with | separator)\n\n` +
-    `Items:\n${itemLines}`;
+    `Return mid-range Utah contractor prices for each item.\n` +
+    `JSON: {"prices":{"<key>":{"labor":<num>,"material":<num>}}}\n` +
+    `Rules: labor=labor/unit, material=material/unit, numbers only, no $.\n` +
+    `LS items: labor=lump sum total, material=0.\n` +
+    `Units: SF=sqft, LF=linear ft, EA=each, LS=lump sum, SQ=100sqft, CY=cu yd, HR=hour.\n` +
+    `Use exact key string with | separator.\n\nItems:\n${itemLines}`;
 
-  // ── OPENAI CALL ───────────────────────────────────────────────────────────
-  const TIMEOUT_MS = 55000;
+  // ── OPENAI CALL with 50s timeout ─────────────────────────────────────────
+  const TIMEOUT_MS = 50000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -113,7 +108,7 @@ export default async function handler(req, res) {
           { role: "system", content: systemPrompt },
           { role: "user",   content: userPrompt   }
         ],
-        max_tokens: 8000,   // enough for 175 items × ~40 tokens each
+        max_tokens: 5000,         // ~88 items × ~40 tokens = ~3500, 5000 gives headroom
         temperature: 0,
         seed: 42,
         response_format: { type: "json_object" }
@@ -126,7 +121,6 @@ export default async function handler(req, res) {
     if (!openaiRes.ok) {
       const errData = await openaiRes.json().catch(() => ({}));
       console.error("[OPENAI ERROR]", JSON.stringify(errData));
-      // Pass 429 back so frontend can show proper rate limit message
       if (openaiRes.status === 429) {
         return res.status(429).json({ error: "OpenAI rate limit reached. Please wait 1–2 minutes and try again." });
       }
@@ -139,7 +133,7 @@ export default async function handler(req, res) {
     // Strip any accidental fences
     text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
 
-    // Extract JSON block if response doesn't start with {
+    // Extract JSON block if needed
     if (!text.startsWith("{")) {
       const match = text.match(/\{[\s\S]*\}/);
       if (match) text = match[0];
@@ -160,7 +154,7 @@ export default async function handler(req, res) {
         const closes = (fixed.match(/\}/g) || []).length;
         if (opens > closes) fixed += "}".repeat(opens - closes);
         parsed = JSON.parse(fixed);
-        console.warn("[JSON REPAIRED] Auto-fixed truncated response");
+        console.warn("[JSON REPAIRED]");
       } catch (e2) {
         console.error("[JSON PARSE FAILED]", text.substring(0, 200));
         return res.status(502).json({ error: "AI returned invalid data. Please try again." });
@@ -176,8 +170,8 @@ export default async function handler(req, res) {
     for (const [key, val] of Object.entries(parsed.prices)) {
       if (val && typeof val === "object") {
         sanitizedPrices[key] = {
-          labor:    parseFloat(String(val.labor   || "0").replace(/[^0-9.]/g, "")) || 0,
-          material: parseFloat(String(val.material|| "0").replace(/[^0-9.]/g, "")) || 0
+          labor:    parseFloat(String(val.labor    || "0").replace(/[^0-9.]/g, "")) || 0,
+          material: parseFloat(String(val.material || "0").replace(/[^0-9.]/g, "")) || 0
         };
       }
     }
