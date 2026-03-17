@@ -936,7 +936,7 @@ function showConfirmModal(title,msg,confirmLabel,onConfirm) {
 }
 function doReset() {
   showConfirmModal('Reset All Data?','This will clear all your estimates and cannot be undone.','Yes, Reset Everything', () => {
-    localStorage.removeItem(STORE); localStorage.removeItem('reia_title');
+    localStorage.removeItem(STORE); localStorage.removeItem('reia_title'); localStorage.removeItem('ureia_rehab_export');
     state = {}; loadState();
     buildTabsForStep(currentStep); buildPanelsForStep(currentStep);
     renderAll(); recalcAll();
@@ -1307,6 +1307,7 @@ function initTabScrollObserver() {
     // (User's work is not preserved across logins — they must use Export Excel to save)
     localStorage.removeItem('utah_reia_v6');
     localStorage.removeItem('reia_title');
+    localStorage.removeItem('ureia_rehab_export');
     document.getElementById('gateWrap').style.display = 'none';
     document.getElementById('appWrap').style.display  = 'flex';
     initApp();
