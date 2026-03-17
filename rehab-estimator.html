@@ -942,17 +942,18 @@ function loadTitle() {
 async function doAIFill() {
   const now = Date.now();
   const lastCall = parseInt(localStorage.getItem('ai_last_call')||'0');
-  if (now - lastCall < 30000) {
-    const secs = Math.ceil((30000-(now-lastCall))/1000);
+  if (now - lastCall < 10000) {
+    const secs = Math.ceil((10000-(now-lastCall))/1000);
     aiStatus('error',`⚠ Please wait ${secs} more second${secs===1?'':'s'} before fetching prices again.`);
     return;
   }
   localStorage.setItem('ai_last_call', now);
   const btn = document.getElementById('aiBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin" style="border-color:#fff;border-top-color:transparent"></span> Fetching…';
+  btn.innerHTML = '<span class="spin" style="border-color:#fff;border-top-color:transparent"></span> Fetching prices…';
+  aiStatus('loading', 'Fetching Utah market prices…');
 
-  // ── Collect all labeled non-contingency rows ──────────────────────────────
+  // Collect all labeled non-contingency rows
   const items = [];
   CATS.forEach(cat => {
     state[cat.id].rows.forEach(row => {
@@ -960,159 +961,56 @@ async function doAIFill() {
     });
   });
 
-  // ── Split into 2 batches (~88 each) — each takes ~15-20s, safe within 55s limit ──
-  const mid = Math.ceil(items.length / 2);
-  const batches = [items.slice(0, mid), items.slice(mid)];
-
-  // ── Fetch one batch with 52s timeout and 429 exponential backoff ──────────
-  async function fetchBatch(batchItems, batchNum, attempt=1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 52000);
-    let res;
-    try {
-      res = await fetch(PROXY_URL, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({items: batchItems}),
-        signal: controller.signal
-      });
-      clearTimeout(timer);
-    } catch(e) {
-      clearTimeout(timer);
-      if (e.name==='AbortError') throw new Error('Request timed out — the AI took too long. Please try again.');
-      throw e;
-    }
-
-    // Handle rate limit with exponential backoff
-    if (res.status === 429) {
-      if (attempt >= 3) {
-        aiStatus('error', '⚠ OpenAI rate limit reached. Please wait 1–2 minutes then try again.');
-        throw new Error('RATE_LIMIT');
-      }
-      const waitSec = Math.pow(2, attempt) + 1;
-      aiStatus('loading', `Rate limit hit — waiting ${waitSec}s before retry…`);
-      await new Promise(r => setTimeout(r, waitSec * 1000));
-      return fetchBatch(batchItems, batchNum, attempt + 1);
-    }
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({items})
+    });
 
     if (!res.ok) {
       let errMsg = 'Server error ' + res.status;
       try { const e = await res.json(); errMsg = e.error || errMsg; } catch(_){}
       throw new Error(errMsg);
     }
-    return res;
-  }
 
-  try {
-    const allPrices = {};
+    const data = await res.json();
+    if (!data.prices) throw new Error('No prices returned.');
 
-    for (let b = 0; b < batches.length; b++) {
-      aiStatus('loading', `Fetching AI prices — part ${b+1} of ${batches.length} (${Math.round(b/batches.length*100)}% done)… please wait.`);
-      const res  = await fetchBatch(batches[b], b+1);
-      const data = await res.json();
-      if (data.prices) Object.assign(allPrices, data.prices);
-      // Brief pause between batches to avoid rate limit
-      if (b < batches.length - 1) await new Promise(r => setTimeout(r, 800));
-    }
-
-    // ── Apply ALL prices to state ─────────────────────────────────────────
+    // Apply prices to state
     let totalCount = 0;
     CATS.forEach(cat => {
-      state[cat.id].rows.forEach((row,i) => {
+      state[cat.id].rows.forEach((row, i) => {
         if (row.isContingency) return;
         const key = `${cat.label}|${row.label}`;
-        const p = allPrices[key];
+        const p = data.prices[key];
         if (p) {
-          if (typeof p.labor    === 'number') state[cat.id].rows[i].labor    = p.labor.toFixed(2);
-          if (typeof p.material === 'number') state[cat.id].rows[i].material = p.material.toFixed(2);
+          if (typeof p.labor    === 'number' && p.labor    > 0) state[cat.id].rows[i].labor    = p.labor.toFixed(2);
+          if (typeof p.material === 'number' && p.material > 0) state[cat.id].rows[i].material = p.material.toFixed(2);
           // qty intentionally NOT set — user must enter quantity manually
-          state[cat.id].rows[i].aiHit = true;
-          totalCount++;
+          if (p.labor > 0 || p.material > 0) {
+            state[cat.id].rows[i].aiHit = true;
+            totalCount++;
+          }
         }
       });
     });
 
-    // ── Re-render ALL panels so every tab shows updated prices ───────────
-    // renderAll() only updates visible tbodies — rebuild all panels to force
-    // every tab to reflect the new state values in their input fields
+    // Rebuild all panels so every tab shows updated prices in inputs
     buildPanelsForStep(currentStep);
     renderAll();
     recalcAll();
     persistNow();
 
-    aiStatus('success', `✓ AI filled ${totalCount} line items with Utah market prices. Blue = AI-estimated — review and adjust as needed.`);
+    aiStatus('success', `✓ Filled ${totalCount} line items with Q1 2025 Utah market prices. Review and adjust quantities to calculate totals.`);
 
   } catch(e) {
-    if (e.message !== 'RATE_LIMIT') {
-      localStorage.removeItem('ai_last_call');
-      const msg = (e.message.includes('timeout') || e.message.includes('timed out'))
-        ? '⚠ Request timed out — the AI took too long. Please click "AI Auto-Fill Prices" to try again.'
-        : '⚠ ' + e.message;
-      aiStatus('error', msg);
-    } else {
-      localStorage.removeItem('ai_last_call');
-    }
+    localStorage.removeItem('ai_last_call');
+    aiStatus('error', '⚠ ' + e.message);
   }
 
   btn.disabled = false;
   btn.innerHTML = '<span>✦</span> AI Auto-Fill Prices';
-}
-
-// ============================================================
-// EXCEL EXPORT
-// ============================================================
-function exportExcel() {
-  const wb = XLSX.utils.book_new();
-  const title = document.getElementById('reportTitle').value || 'Rehab Estimate';
-  const summaryRows = [
-    ['Utah REIA – Rehab Estimator'],['Report:',title],
-    ['Date:',new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})],
-    [],[' SECTION','CATEGORY','SUBTOTAL']
-  ];
-  let grandTotal=0;
-  [{label:'General Conditions',cats:GENERAL_CATS},{label:'Exterior',cats:EXTERIOR_CATS},{label:'Interior',cats:INTERIOR_CATS}].forEach(g => {
-    g.cats.forEach(cid => {
-      const cat=CATS.find(c=>c.id===cid); let sub=0;
-      state[cid].rows.forEach(r => {
-        if(r.isContingency){const p=parseFloat(r.qty);sub+=isNaN(p)?0:getContingencyBase()*(p/100);}
-        else sub+=rowTotal(r);
-      });
-      if(sub>0){summaryRows.push([g.label,cat.label,sub]);grandTotal+=sub;}
-    });
-  });
-  summaryRows.push([],['','GRAND TOTAL',grandTotal]);
-  const wsSummary=XLSX.utils.aoa_to_sheet(summaryRows);
-  wsSummary['!cols']=[{wch:22},{wch:32},{wch:16}];
-  XLSX.utils.book_append_sheet(wb,wsSummary,'Summary');
-
-  CATS.forEach(cat => {
-    const rows=state[cat.id].rows;
-    if(!rows.some(r=>r.label||parseFloat(r.labor)||parseFloat(r.material)||r.isContingency)) return;
-    const sheetRows=[[cat.label.toUpperCase()],[],['Done','Description','Unit of Measure','Quantity','Labor','Material Price','Total']];
-    let catTotal=0;
-    rows.forEach(row => {
-      if(!row.label&&!row.labor&&!row.material&&!row.isContingency) return;
-      let tot=0;
-      if(row.isContingency){const p=parseFloat(row.qty);tot=isNaN(p)?0:getContingencyBase()*(p/100);}
-      else tot=rowTotal(row);
-      catTotal+=tot;
-      const unitLabel=UNITS.find(u=>u.value===row.unit)?.label||row.unit;
-      sheetRows.push([
-        row.done?'Yes':'No', row.label||'', unitLabel,
-        row.isContingency?(row.qty+'%'):(parseFloat(row.qty)||''),
-        row.isContingency?'':(parseFloat(row.labor)||''),
-        row.isContingency?'':(parseFloat(row.material)||''),
-        tot||''
-      ]);
-    });
-    sheetRows.push([],['','','','','','SUBTOTAL:',catTotal]);
-    const ws=XLSX.utils.aoa_to_sheet(sheetRows);
-    ws['!cols']=[{wch:6},{wch:32},{wch:18},{wch:10},{wch:12},{wch:16},{wch:14}];
-    let name=cat.label.replace(/[^a-z0-9 ]/gi,'').substring(0,28);
-    let attempt=name,n=2;
-    while(wb.SheetNames.includes(attempt)) attempt=name+'_'+n++;
-    XLSX.utils.book_append_sheet(wb,ws,attempt||'Sheet'+n);
-  });
-  XLSX.writeFile(wb,(title.replace(/[^a-z0-9]/gi,'_').substring(0,40)||'Rehab_Estimate')+'.xlsx');
 }
 
 let _aiStatusTimer=null;
