@@ -299,10 +299,11 @@
     <button class="tab-scroll-btn right hidden" id="tabScrollRight" onclick="scrollTabBar(1)" title="Scroll right">&#8594;</button>
   </div>
   <!-- LOCATION STEP PAGE -->
-  <div id="locationPage" style="display:none;padding:32px 24px;max-width:680px;margin:0 auto;">
-    <div style="margin-bottom:28px;">
-      <h2 style="font-size:1.3rem;font-weight:800;color:var(--navy);margin-bottom:6px;">Select Your Project Location</h2>
-      <p style="font-size:0.88rem;color:var(--slate);line-height:1.6;">Choose the state where the project is located. AI Auto-Fill will use local contractor rates for that market.</p>
+  <div id="locationPage" style="display:none;background:var(--bg);min-height:100%;padding:32px 24px;">
+    <div style="max-width:620px;margin:0 auto;">
+    <div style="margin-bottom:24px;background:var(--navy);border-radius:12px;padding:24px 28px;">
+      <h2 style="font-size:1.3rem;font-weight:800;color:#fff;margin-bottom:8px;">📍 Select Your Project Location</h2>
+      <p style="font-size:0.88rem;color:#93c5fd;line-height:1.6;margin:0;">Choose the state where the project is located. AI Auto-Fill will use local contractor rates for that market.</p>
     </div>
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:28px;box-shadow:var(--shadow-sm);">
       <label style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--slate);margin-bottom:10px;">State / Territory</label>
@@ -316,7 +317,8 @@
       </div>
       <p style="margin-top:14px;font-size:0.78rem;color:var(--slate-light);line-height:1.5;">Prices are AI-estimated mid-range contractor rates for the selected state. Always verify with local contractors before finalizing a budget.</p>
     </div>
-    <div style="margin-top:24px;display:flex;justify-content:flex-end;">
+    </div><!-- /max-width wrapper -->
+    <div style="max-width:620px;margin:0 auto;margin-top:24px;display:flex;justify-content:flex-end;">
       <button class="step-nav-btn next" onclick="goStep('general')" id="locNextBtn" disabled
         style="padding:10px 28px;font-size:0.88rem;">
         Next: General →
