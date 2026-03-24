@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Utah REIA – Rehab Estimator</title>
+<title>Build Scope AI – Rehab &amp; New Construction Estimator</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.google.com/recaptcha/api.js" async defer></script>
@@ -24,6 +24,7 @@
   .gate-card{background:#fff;border-radius:20px;box-shadow:var(--shadow-lg);padding:48px 40px;width:100%;max-width:420px;text-align:center;}
   .gate-card img{max-width:150px;margin-bottom:28px;}
   .gate-card h1{font-size:1.5rem;font-weight:700;color:var(--navy);margin-bottom:8px;}
+  .tool-subtitle{font-size:0.95rem;font-weight:700;color:var(--green);margin-bottom:8px;}
   .gate-card .subtitle{color:var(--slate);font-size:0.88rem;margin-bottom:32px;line-height:1.6;}
   .gate-field{text-align:left;margin-bottom:16px;}
   .gate-field label{display:block;font-size:0.75rem;font-weight:700;color:var(--navy);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.07em;}
@@ -94,12 +95,8 @@
   .exp-table th.c{text-align:center;}
   .exp-table td{padding:0;border-bottom:1px solid #f8fafc;vertical-align:middle;}
   .exp-row:hover{background:#fafbfc;}
-  .exp-row.is-done{opacity:0.5;}
-  .exp-row.is-done .inp-label{text-decoration:line-through;color:var(--slate-light);}
   .exp-row.contingency-row{background:var(--yellow-bg);}
   .exp-row.contingency-row:hover{background:#fef9c3;}
-  .chk{width:40px;text-align:center;padding:0 4px;}
-  .chk input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:var(--green);}
   .inp-label{width:100%;padding:8px 10px;border:none;outline:none;font-size:0.85rem;font-family:'DM Sans',sans-serif;color:var(--navy);background:transparent;}
   .inp-label:focus{background:var(--blue-light);}
   .sel-method{width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:5px;font-size:0.8rem;font-family:'DM Sans',sans-serif;color:var(--navy);background:white;outline:none;cursor:pointer;}
@@ -131,6 +128,14 @@
   .modal-btn-confirm{padding:9px 20px;background:var(--red);color:white;border:none;border-radius:7px;font-weight:700;font-size:0.85rem;cursor:pointer;font-family:inherit;}
   .spin{width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
   @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* MODE TOGGLE */
+  .mode-toggle-bar{background:var(--navy);padding:8px 20px;display:flex;align-items:center;justify-content:center;gap:12px;}
+  .mode-toggle-bar .mode-label{font-size:0.75rem;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.08em;}
+  .mode-toggle{display:flex;background:rgba(255,255,255,0.1);border-radius:8px;padding:3px;gap:3px;}
+  .mode-btn{padding:7px 22px;border:none;border-radius:6px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;letter-spacing:0.02em;transition:all .2s;color:rgba(255,255,255,0.6);background:transparent;}
+  .mode-btn.active{background:#fff;color:var(--navy);box-shadow:0 1px 4px rgba(0,0,0,0.2);}
+  .mode-btn:not(.active):hover{color:#fff;background:rgba(255,255,255,0.15);}
 
   /* STEP NAV */
   .step-nav{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:center;}
@@ -195,7 +200,8 @@
 <div id="gateWrap">
   <div class="gate-card">
     <img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA">
-    <h1>Rehab Estimator</h1>
+    <h1>Build Scope AI</h1>
+    <p class="tool-subtitle">Rehab &amp; New Construction Cost Estimator</p>
     <p class="subtitle">Enter your phone number to unlock the calculator.<br>For Utah REIA members only.</p>
     <div class="gate-field">
       <label>Phone Number</label>
@@ -213,9 +219,18 @@
   <nav class="app-nav">
     <div class="nav-brand">
       <img src="https://assets.cdn.filesafe.space/DNirEjy0ejVwbHsaBYrn/media/682f680ec314718407baed82.png" alt="Utah REIA">
-      <span>Rehab Estimator</span>
+      <span>Build Scope AI <span style="font-weight:400;font-size:0.75rem;color:#93c5fd;margin-left:6px;">Rehab &amp; New Construction</span></span>
     </div>
   </nav>
+
+  <!-- MODE TOGGLE -->
+  <div class="mode-toggle-bar">
+    <span class="mode-label">Estimator Mode</span>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="modeRehab" onclick="switchMode('rehab')">🔧 Rehab</button>
+      <button class="mode-btn" id="modeNewbuild" onclick="switchMode('newbuild')">🏗 New Construction</button>
+    </div>
+  </div>
 
   <div id="aiStatusBar"><span class="spin"></span><span id="aiStatusTxt"></span></div>
 
@@ -227,8 +242,7 @@
     <div class="s-block"><span class="sl">Exterior</span><span class="sv" id="extTotal">$0.00</span></div>
     <div class="s-sep"></div>
     <div class="s-block"><span class="sl">Interior</span><span class="sv" id="intTotal">$0.00</span></div>
-    <div class="s-sep"></div>
-    <div class="s-block"><span class="sl">Completed</span><span class="sv" id="doneCount">0</span></div>
+
     <div class="s-sep"></div>
     <input type="text" id="reportTitle" placeholder="Report title – e.g. 123 Main St, Salt Lake City">
     <div class="s-actions">
@@ -306,7 +320,7 @@
   </div>
 
   <footer style="text-align:center;padding:14px;font-size:0.72rem;color:var(--slate-light);border-top:1px solid var(--border);background:white;">
-    © 2025 Utah REIA Repair Estimator · All rights reserved
+    © 2025 Utah REIA · Build Scope AI · All rights reserved
   </footer>
 </div>
 
@@ -341,7 +355,7 @@ const UNITS = [
 // ============================================================
 // CATEGORIES
 // ============================================================
-const CATS = [
+const REHAB_CATS = [
   // ── GENERAL ─────────────────────────────────────────────
   {id:'gen-cond', label:'General Conditions', group:'general', items:[
     {label:'Project management',unit:'HR'},{label:'Site supervision',unit:'HR'},
@@ -491,14 +505,140 @@ const CATS = [
   ]}
 ];
 
+// ── NEW CONSTRUCTION CATEGORIES ───────────────────────────────────────────
+const NEW_BUILD_CATS = [
+  // ── GENERAL ────────────────────────────────────────────────────────────
+  {id:'nb-gen-cond', label:'General Conditions', group:'general', items:[
+    {label:'Project management',unit:'HR'},{label:'Site supervision',unit:'HR'},
+    {label:'Temporary utilities',unit:'LS'},{label:'Storage container',unit:'LS'},
+    {label:'Temporary toilet',unit:'LS'},{label:'Temporary water/power',unit:'LS'},
+    {label:'Material delivery/handling',unit:'LS'},{label:'Labor supervision',unit:'HR'},
+    {label:'Admin/Security',unit:'LS'},{label:'Misc tools & consumables',unit:'LS'}
+  ]},
+  {id:'nb-prof-soft', label:'Professional & Soft Costs', group:'general', items:[
+    {label:'Architectural plans',unit:'LS'},{label:'Structural engineering',unit:'LS'},
+    {label:'Building permit',unit:'LS'},{label:'Utility connection fees',unit:'LS'},
+    {label:'Soil/Geo report',unit:'LS'},{label:'Survey',unit:'LS'},
+    {label:'Inspections',unit:'EA'},{label:'Legal/Title',unit:'LS'}
+  ]},
+  {id:'nb-risk', label:'Risk & Financial Controls', group:'general', items:[
+    {label:'Builder risk insurance',unit:'LS'},
+    {label:'Contingency – % of hard costs',unit:'PCT',isContingency:true,qty:'10'}
+  ]},
+  // ── SITE WORK ──────────────────────────────────────────────────────────
+  {id:'nb-sitework', label:'A. Site Work & Prep', group:'exterior', items:[
+    {label:'Demolition/clearing',unit:'LS'},{label:'Tree removal',unit:'EA'},
+    {label:'Grading',unit:'LS'},{label:'Excavation',unit:'CY'},
+    {label:'Backfill & compaction',unit:'CY'},{label:'Erosion control',unit:'LS'},
+    {label:'Temporary road/access',unit:'LS'}
+  ]},
+  {id:'nb-foundation', label:'B. Foundation', group:'exterior', items:[
+    {label:'Footings',unit:'LF'},{label:'Foundation walls',unit:'SF'},
+    {label:'Slab on grade',unit:'SF'},{label:'Basement slab',unit:'SF'},
+    {label:'Foundation waterproofing',unit:'SF'},{label:'Drainage board',unit:'SF'},
+    {label:'Radon mitigation rough-in',unit:'LS'},{label:'Foundation anchor bolts',unit:'LS'}
+  ]},
+  {id:'nb-framing', label:'C. Framing', group:'exterior', items:[
+    {label:'Floor framing',unit:'SF'},{label:'Wall framing',unit:'SF'},
+    {label:'Roof framing',unit:'SF'},{label:'Engineered lumber/beams',unit:'LF'},
+    {label:'Sheathing – walls',unit:'SF'},{label:'Sheathing – roof',unit:'SF'},
+    {label:'House wrap',unit:'SF'},{label:'Exterior windows',unit:'EA'},
+    {label:'Exterior doors',unit:'EA'},{label:'Garage door rough-in',unit:'EA'}
+  ]},
+  {id:'nb-roofing', label:'D. Roofing & Exterior Skin', group:'exterior', items:[
+    {label:'Asphalt shingles',unit:'SQ'},{label:'Roof underlayment',unit:'SQ'},
+    {label:'Flashing',unit:'LF'},{label:'Gutters',unit:'LF'},
+    {label:'Soffit/Fascia',unit:'LF'},{label:'Roof vents',unit:'EA'},
+    {label:'Siding',unit:'SF'},{label:'Trim/Caulk',unit:'LF'},
+    {label:'Stucco/EIFS',unit:'SF'}
+  ]},
+  {id:'nb-concrete', label:'E. Flatwork & Hardscape', group:'exterior', items:[
+    {label:'Driveway',unit:'SF'},{label:'Walkways/Sidewalk',unit:'SF'},
+    {label:'Patio/Porch slab',unit:'SF'},{label:'Garage slab',unit:'SF'},
+    {label:'Steps',unit:'EA'},{label:'Retaining walls',unit:'LF'}
+  ]},
+  {id:'nb-utilities-ext', label:'F. Exterior Utilities', group:'exterior', items:[
+    {label:'Sewer lateral',unit:'LF'},{label:'Water service line',unit:'LF'},
+    {label:'Gas service line',unit:'LF'},{label:'Electric service trench',unit:'LF'},
+    {label:'Utility meter & panel',unit:'EA'},{label:'Septic system',unit:'LS'}
+  ]},
+  {id:'nb-landscaping', label:'G. Landscaping', group:'exterior', items:[
+    {label:'Topsoil',unit:'CY'},{label:'Sod/Grass seed',unit:'SF'},
+    {label:'Irrigation system',unit:'LS'},{label:'Trees & shrubs',unit:'EA'},
+    {label:'Rock/Mulch',unit:'SF'},{label:'Fencing',unit:'LF'}
+  ]},
+  // ── INTERIOR ───────────────────────────────────────────────────────────
+  {id:'nb-mep-rough', label:'A. MEP Rough-Ins', group:'interior', items:[
+    {label:'Plumbing rough-in',unit:'LS'},{label:'Electrical rough-in',unit:'LS'},
+    {label:'HVAC rough-in/ductwork',unit:'LS'},{label:'Gas rough-in',unit:'LS'},
+    {label:'Low voltage rough-in',unit:'LS'},{label:'Fire sprinkler rough-in',unit:'LS'}
+  ]},
+  {id:'nb-insulation', label:'B. Insulation', group:'interior', items:[
+    {label:'Wall insulation – batts',unit:'SF'},{label:'Attic insulation – blown',unit:'SF'},
+    {label:'Rim joist insulation',unit:'LF'},{label:'Spray foam – crawl/rim',unit:'SF'},
+    {label:'Sound insulation',unit:'SF'}
+  ]},
+  {id:'nb-drywall', label:'C. Drywall', group:'interior', items:[
+    {label:'Hang drywall',unit:'SF'},{label:'Tape & mud',unit:'SF'},
+    {label:'Texture',unit:'SF'},{label:'Ceiling drywall',unit:'SF'},
+    {label:'Fire-rated drywall (garage)',unit:'SF'}
+  ]},
+  {id:'nb-int-paint', label:'D. Interior Paint', group:'interior', items:[
+    {label:'Walls',unit:'SF'},{label:'Ceilings',unit:'SF'},
+    {label:'Doors',unit:'EA'},{label:'Trim/Baseboard',unit:'LF'}
+  ]},
+  {id:'nb-flooring', label:'E. Flooring', group:'interior', items:[
+    {label:'LVP',unit:'SF'},{label:'Hardwood',unit:'SF'},
+    {label:'Tile',unit:'SF'},{label:'Carpet',unit:'SF'},
+    {label:'Baseboards',unit:'LF'},{label:'Transitions',unit:'LF'}
+  ]},
+  {id:'nb-kitchen', label:'F. Kitchen', group:'interior', items:[
+    {label:'Cabinets – base',unit:'LF'},{label:'Cabinets – upper',unit:'LF'},
+    {label:'Island',unit:'EA'},{label:'Countertops – quartz',unit:'SF'},
+    {label:'Countertops – laminate',unit:'SF'},{label:'Sink/Faucet',unit:'EA'},
+    {label:'Disposal',unit:'EA'},{label:'Appliances',unit:'EA'},
+    {label:'Hood fan/Range hood',unit:'EA'},{label:'Hardware',unit:'EA'}
+  ]},
+  {id:'nb-bathrooms', label:'G. Bathrooms', group:'interior', items:[
+    {label:'Toilet',unit:'EA'},{label:'Vanity',unit:'EA'},
+    {label:'Tile shower',unit:'SF'},{label:'Tile floor',unit:'SF'},
+    {label:'Shower door',unit:'EA'},{label:'Faucet/Fixtures',unit:'EA'},
+    {label:'Bath accessories',unit:'LS'}
+  ]},
+  {id:'nb-mep-finish', label:'H. MEP Finish', group:'interior', items:[
+    {label:'Plumbing trim-out',unit:'LS'},{label:'Electrical trim-out',unit:'LS'},
+    {label:'HVAC equipment & trim',unit:'LS'},{label:'Furnace',unit:'EA'},
+    {label:'AC unit',unit:'EA'},{label:'Water heater',unit:'EA'},
+    {label:'Panel & breakers',unit:'EA'},{label:'Thermostat',unit:'EA'}
+  ]},
+  {id:'nb-int-finish', label:'I. Interior Finish', group:'interior', items:[
+    {label:'Interior doors',unit:'EA'},{label:'Door hardware',unit:'EA'},
+    {label:'Stair system',unit:'LS'},{label:'Closet shelving',unit:'LS'},
+    {label:'Window trim',unit:'EA'},{label:'Crown/Base molding',unit:'LF'},
+    {label:'Mirrors',unit:'EA'},{label:'Bathroom accessories',unit:'LS'}
+  ]}
+];
+
+// ── ACTIVE MODE: 'rehab' | 'newbuild' ─────────────────────────────────────
+let estimatorMode = 'rehab';
+let CATS = REHAB_CATS;
+
+function getCATSForMode(mode) {
+  return mode === 'newbuild' ? NEW_BUILD_CATS : REHAB_CATS;
+}
+
 const STORE = 'utah_reia_v6';
 let state = {};
 let activeTab = CATS[0].id;
 const PROXY_URL = 'https://rehab-estimator-delta.vercel.app/api/ai-pricing';
 
-const GENERAL_CATS  = CATS.filter(c => c.group==='general').map(c => c.id);
-const EXTERIOR_CATS = CATS.filter(c => c.group==='exterior').map(c => c.id);
-const INTERIOR_CATS = CATS.filter(c => c.group==='interior').map(c => c.id);
+function getGeneralCats()  { return CATS.filter(c => c.group==='general').map(c => c.id); }
+function getExteriorCats() { return CATS.filter(c => c.group==='exterior').map(c => c.id); }
+function getInteriorCats() { return CATS.filter(c => c.group==='interior').map(c => c.id); }
+// Shorthands kept for compatibility
+function GENERAL_CATS()  { return getGeneralCats(); }
+function EXTERIOR_CATS() { return getExteriorCats(); }
+function INTERIOR_CATS() { return getInteriorCats(); }
 let currentStep = 'general';
 
 // ============================================================
@@ -567,7 +707,7 @@ function prevStep() {
 }
 
 function getCats(step) {
-  return step==='general' ? GENERAL_CATS : step==='exterior' ? EXTERIOR_CATS : INTERIOR_CATS;
+  return step==='general' ? getGeneralCats() : step==='exterior' ? getExteriorCats() : getInteriorCats();
 }
 
 function buildTabsForStep(step) {
@@ -609,7 +749,6 @@ function buildPanelsForStep(step) {
       <div class="exp-card">
         <table class="exp-table">
           <thead><tr>
-            <th class="c" style="width:40px;">Done</th>
             <th>Description</th>
             <th style="width:160px;">Unit of Measure</th>
             <th class="r" style="width:90px;">Quantity</th>
@@ -651,9 +790,9 @@ function buildResultsPage() {
 
   const body = document.getElementById('rb-body');
   body.innerHTML = '';
-  [{key:'general',label:'General Conditions',bc:'gen',cats:GENERAL_CATS},
-   {key:'exterior',label:'Exterior',bc:'ext',cats:EXTERIOR_CATS},
-   {key:'interior',label:'Interior',bc:'int',cats:INTERIOR_CATS}
+  [{key:'general',label:'General Conditions',bc:'gen',cats:getGeneralCats()},
+   {key:'exterior',label: estimatorMode==='newbuild' ? 'Site & Structure' : 'Exterior',bc:'ext',cats:getExteriorCats()},
+   {key:'interior',label: estimatorMode==='newbuild' ? 'Interior & Systems' : 'Interior',bc:'int',cats:getInteriorCats()}
   ].forEach(g => {
     const sec = document.createElement('div');
     sec.className = 'rb-section'; sec.textContent = g.label;
@@ -676,9 +815,29 @@ function buildResultsPage() {
 // ============================================================
 // INIT
 // ============================================================
-function initApp() {
+function switchMode(mode) {
+  if (estimatorMode === mode) return;
+  estimatorMode = mode;
+  CATS = getCATSForMode(mode);
+  // Update toggle button states
+  document.getElementById('modeRehab').classList.toggle('active', mode === 'rehab');
+  document.getElementById('modeNewbuild').classList.toggle('active', mode === 'newbuild');
+  // Reset state and restart from General
+  state = {};
   loadState();
-  activeTab = GENERAL_CATS[0];
+  currentStep = 'general';
+  activeTab = getGeneralCats()[0];
+  buildTabsForStep('general');
+  buildPanelsForStep('general');
+  renderAll();
+  recalcAll();
+  applyStepUI('general');
+}
+
+function initApp() {
+  CATS = getCATSForMode(estimatorMode);
+  loadState();
+  activeTab = getGeneralCats()[0];
   buildTabsForStep('general');
   buildPanelsForStep('general');
   renderAll();
@@ -763,11 +922,10 @@ function mkRow(cid, i, row) {
   const isC = row.isContingency === true;
   const unitOpts = UNITS.map(u => `<option value="${u.value}"${row.unit===u.value?' selected':''}>${u.label}</option>`).join('');
   const tr = document.createElement('tr');
-  tr.className = 'exp-row'+(row.done?' is-done':'')+(isC?' contingency-row':'');
+  tr.className = 'exp-row'+(isC?' contingency-row':'');
   tr.id = `r-${cid}-${i}`;
   if (isC) {
     tr.innerHTML = `
-      <td class="chk"><input type="checkbox"${row.done?' checked':''} onchange="onDone('${cid}',${i},this.checked)"></td>
       <td><input class="inp-label" type="text" value="${esc(row.label)}" placeholder="Description…" oninput="onF('${cid}',${i},'label',this.value)"></td>
       <td style="text-align:center;font-size:0.78rem;font-weight:700;color:var(--slate);letter-spacing:0.04em;">%</td>
       <td style="position:relative;">
@@ -788,7 +946,6 @@ function mkRow(cid, i, row) {
       <td><button class="del-btn" style="visibility:hidden;">✕</button></td>`;
   } else {
     tr.innerHTML = `
-      <td class="chk"><input type="checkbox"${row.done?' checked':''} onchange="onDone('${cid}',${i},this.checked)"></td>
       <td><input class="inp-label" type="text" value="${esc(row.label)}" placeholder="Description…" oninput="onF('${cid}',${i},'label',this.value)"></td>
       <td><select class="sel-method" onchange="onUnit('${cid}',${i},this.value)">${unitOpts}</select></td>
       <td><input class="inp-num" type="number" min="0" value="${row.qty!==''?row.qty:''}" placeholder="Qty" oninput="onF('${cid}',${i},'qty',this.value)"></td>
@@ -805,12 +962,7 @@ function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 // ============================================================
 // EVENTS
 // ============================================================
-function onDone(cid,i,v) {
-  state[cid].rows[i].done = v;
-  const tr = document.getElementById(`r-${cid}-${i}`);
-  if (tr) tr.classList.toggle('is-done', v);
-  recalcAll(); persist();
-}
+
 function onF(cid,i,field,val) {
   state[cid].rows[i][field] = val;
   // Update this specific row's total cell immediately for instant feedback
@@ -821,7 +973,7 @@ function onF(cid,i,field,val) {
 }
 function onUnit(cid,i,val) { state[cid].rows[i].unit = val; recalcAll(); persist(); }
 function addRow(cid) {
-  state[cid].rows.push({label:'',unit:'LS',qty:'',labor:'',material:'',done:false,aiHit:false,isContingency:false});
+  state[cid].rows.push({label:'',unit:'LS',qty:'',labor:'',material:'',aiHit:false,isContingency:false});
   renderRows(cid); recalcAll(); persist();
 }
 function delRow(cid,i) { state[cid].rows.splice(i,1); renderRows(cid); recalcAll(); persist(); }
@@ -844,7 +996,7 @@ function rowTotal(row) {
 
 function getContingencyBase() {
   let base = 0;
-  [...EXTERIOR_CATS, ...INTERIOR_CATS].forEach(cid => {
+  [...getExteriorCats(), ...getInteriorCats()].forEach(cid => {
     state[cid].rows.forEach(r => { base += rowTotal(r); });
   });
   return base;
@@ -884,10 +1036,9 @@ function updateCatTotal(cid) {
 }
 
 function updateGrand() {
-  let grand=0, genSum=0, extSum=0, intSum=0, doneCount=0;
+  let grand=0, genSum=0, extSum=0, intSum=0;
   CATS.forEach(c => {
     state[c.id].rows.forEach(r => {
-      if (r.done) doneCount++;
       let t = 0;
       if (r.isContingency) { const p=parseFloat(r.qty); t=isNaN(p)?0:getContingencyBase()*(p/100); }
       else t = rowTotal(r);
@@ -901,7 +1052,6 @@ function updateGrand() {
   document.getElementById('genTotal').textContent   = fmt(genSum);
   document.getElementById('extTotal').textContent   = fmt(extSum);
   document.getElementById('intTotal').textContent   = fmt(intSum);
-  document.getElementById('doneCount').textContent  = doneCount;
   document.getElementById('step-sub-gen').textContent = genSum>0?fmt(genSum):'';
   document.getElementById('step-sub-ext').textContent = extSum>0?fmt(extSum):'';
   document.getElementById('step-sub-int').textContent = intSum>0?fmt(intSum):'';
@@ -1038,9 +1188,9 @@ function printCalculator() {
   const reportDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   let allHTML='', grand=0, genT=0, extT=0, intT=0;
 
-  [{label:'General Conditions',cats:GENERAL_CATS,badge:'#f3e8ff;color:#6b21a8'},
-   {label:'Exterior',cats:EXTERIOR_CATS,badge:'#fef3c7;color:#92400e'},
-   {label:'Interior',cats:INTERIOR_CATS,badge:'#dbeafe;color:#1e40af'}
+  [{label:'General Conditions',cats:getGeneralCats(),badge:'#f3e8ff;color:#6b21a8'},
+   {label:'Exterior',cats:getExteriorCats(),badge:'#fef3c7;color:#92400e'},
+   {label:'Interior',cats:getInteriorCats(),badge:'#dbeafe;color:#1e40af'}
   ].forEach(g => {
     g.cats.forEach(cid => {
       const cat=CATS.find(c=>c.id===cid);
@@ -1094,7 +1244,7 @@ function printCalculator() {
   });
 
   const fM=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const printHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+  const printHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Build Scope AI – Rehab &amp; New Construction Estimator</title>
   <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',sans-serif;color:#0f2340;background:white;padding:22px;font-size:13px;}@media print{body{padding:10px;}@page{margin:1cm;size:A4;}}</style>
   </head><body>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #0f2340;">
