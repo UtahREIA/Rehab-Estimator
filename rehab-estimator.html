@@ -1210,60 +1210,62 @@ async function doAIFill() {
   const btn = document.getElementById('aiBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin" style="border-color:#fff;border-top-color:transparent"></span> Fetching…';
-  aiStatus('loading', `Fetching ${selectedState} contractor prices — sending 3 parallel requests… please wait.`);
+  aiStatus('loading', `Fetching ${selectedState} contractor prices… this takes 30–60 seconds, please wait.`);
 
-  // ── Collect items split by group for parallel requests ───────────────────
-  const groupItems = { general: [], exterior: [], interior: [] };
+  // ── Collect ALL items, then slice into batches of 40 ─────────────────────
+  const allItems = [];
   CATS.forEach(cat => {
     state[cat.id].rows.forEach(row => {
-      if (row.label && !row.isContingency) {
-        groupItems[cat.group].push({cat: cat.label, label: row.label, unit: row.unit});
-      }
+      if (row.label && !row.isContingency)
+        allItems.push({cat: cat.label, label: row.label, unit: row.unit});
     });
   });
 
-  // ── Single fetch helper with 52s timeout ─────────────────────────────────
-  async function fetchGroup(items, groupName) {
+  const BATCH = 40;
+  const batches = [];
+  for (let i = 0; i < allItems.length; i += BATCH) batches.push(allItems.slice(i, i + BATCH));
+
+  // ── Fetch one batch with 52s timeout + 429 retry (exponential backoff) ───
+  async function fetchBatch(items, batchNum, attempt = 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 52000);
+    let res;
     try {
-      const res = await fetch(PROXY_URL, {
+      res = await fetch(PROXY_URL, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ items, state: selectedState }),
         signal: controller.signal
       });
       clearTimeout(timer);
-      if (res.status === 429) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.error || 'Rate limit reached. Please wait and try again.');
-      }
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.error || 'Server error ' + res.status);
-      }
-      return await res.json();
     } catch(e) {
       clearTimeout(timer);
-      if (e.name === 'AbortError') throw new Error(`${groupName} request timed out — please try again.`);
+      if (e.name === 'AbortError') throw new Error('Request timed out. Please try again.');
       throw e;
     }
+    if (res.status === 429) {
+      if (attempt >= 3) throw new Error('Rate limit reached. Please wait 1–2 minutes and try again.');
+      const wait = Math.pow(2, attempt) * 1500; // 3s, 6s
+      aiStatus('loading', `Rate limit — waiting ${Math.round(wait/1000)}s before retry…`);
+      await new Promise(r => setTimeout(r, wait));
+      return fetchBatch(items, batchNum, attempt + 1);
+    }
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error || 'Server error ' + res.status);
+    }
+    return res.json();
   }
 
   try {
-    // ── Fire all 3 groups in parallel ──────────────────────────────────────
-    const [genData, extData, intData] = await Promise.all([
-      fetchGroup(groupItems.general,  'General'),
-      fetchGroup(groupItems.exterior, 'Exterior'),
-      fetchGroup(groupItems.interior, 'Interior'),
-    ]);
-
-    // Merge all price results
-    const allPrices = {
-      ...(genData.prices || {}),
-      ...(extData.prices || {}),
-      ...(intData.prices || {})
-    };
+    const allPrices = {};
+    for (let b = 0; b < batches.length; b++) {
+      aiStatus('loading', `Fetching ${selectedState} prices — part ${b+1} of ${batches.length}… please wait.`);
+      const data = await fetchBatch(batches[b], b + 1);
+      if (data.prices) Object.assign(allPrices, data.prices);
+      // 1.2s gap between batches — avoids triggering OpenAI rate limits
+      if (b < batches.length - 1) await new Promise(r => setTimeout(r, 1200));
+    }
 
     // ── Apply prices to state ─────────────────────────────────────────────
     let totalCount = 0;

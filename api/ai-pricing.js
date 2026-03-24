@@ -61,8 +61,8 @@ export default async function handler(req, res) {
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "Invalid request body." });
   }
-  if (items.length > 100) {
-    return res.status(400).json({ error: "Too many items per request. Max 100." });
+  if (items.length > 50) {
+    return res.status(400).json({ error: "Too many items per request. Max 50." });
   }
 
   // Validate state
@@ -143,7 +143,7 @@ export default async function handler(req, res) {
           { role: "system", content: systemPrompt },
           { role: "user",   content: userPrompt   }
         ],
-        max_tokens: 4000,   // ~60 items × ~45 tokens = ~2700, 4000 gives headroom
+        max_tokens: 2500,   // 40 items × ~35 tokens = ~1400, 2500 gives headroom
         temperature: 0,
         seed: 42,
         response_format: { type: "json_object" }
