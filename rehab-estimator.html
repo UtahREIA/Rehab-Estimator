@@ -254,28 +254,34 @@
   </div>
 
   <div class="step-nav">
-    <div class="step-item active" id="step-gen" onclick="goStep('general')">
-      <div class="step-circle" id="step-circle-gen">1</div>
+    <div class="step-item active" id="step-loc" onclick="goStep('location')">
+      <div class="step-circle" id="step-circle-loc">1</div>
+      <div class="step-label">Location</div>
+      <div class="step-subtotal" id="step-sub-loc"></div>
+    </div>
+    <div class="step-connector" id="connector-0"></div>
+    <div class="step-item" id="step-gen" onclick="goStep('general')">
+      <div class="step-circle" id="step-circle-gen">2</div>
       <div class="step-label">General</div>
       <div class="step-subtotal" id="step-sub-gen"></div>
     </div>
-    <div class="step-connector" id="connector-0"></div>
+    <div class="step-connector" id="connector-1"></div>
     <div class="step-item" id="step-ext" onclick="goStep('exterior')">
-      <div class="step-circle" id="step-circle-ext">2</div>
+      <div class="step-circle" id="step-circle-ext">3</div>
       <div class="step-label">Exterior</div>
       <div class="step-subtotal" id="step-sub-ext"></div>
     </div>
-    <div class="step-connector" id="connector-1"></div>
+    <div class="step-connector" id="connector-2"></div>
     <div class="step-item" id="step-int" onclick="goStep('interior')">
-      <div class="step-circle" id="step-circle-int">3</div>
+      <div class="step-circle" id="step-circle-int">4</div>
       <div class="step-label">Interior</div>
       <div class="step-subtotal" id="step-sub-int"></div>
     </div>
-    <div class="step-connector" id="connector-2"></div>
+    <div class="step-connector" id="connector-3"></div>
     <div class="step-item" id="step-res" onclick="goStep('results')">
-      <div class="step-circle" id="step-circle-res">4</div>
+      <div class="step-circle" id="step-circle-res">5</div>
       <div class="step-label">Results</div>
-      <div class="step-subtotal" id="step-sub-res"></div>
+      <div class="step-subtotal"></div>
     </div>
   </div>
 
@@ -292,6 +298,32 @@
     <div class="tab-bar" id="tabBar"></div>
     <button class="tab-scroll-btn right hidden" id="tabScrollRight" onclick="scrollTabBar(1)" title="Scroll right">&#8594;</button>
   </div>
+  <!-- LOCATION STEP PAGE -->
+  <div id="locationPage" style="display:none;padding:32px 24px;max-width:680px;margin:0 auto;">
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:1.3rem;font-weight:800;color:var(--navy);margin-bottom:6px;">Select Your Project Location</h2>
+      <p style="font-size:0.88rem;color:var(--slate);line-height:1.6;">Choose the state where the project is located. AI Auto-Fill will use local contractor rates for that market.</p>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:28px;box-shadow:var(--shadow-sm);">
+      <label style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--slate);margin-bottom:10px;">State / Territory</label>
+      <select id="stateDropdown" onchange="onStateChange(this.value)"
+        style="width:100%;padding:12px 16px;font-size:1rem;font-family:'DM Sans',sans-serif;border:2px solid var(--border);border-radius:8px;outline:none;color:var(--navy);background:#fff;cursor:pointer;appearance:auto;">
+        <option value="">— Select a state —</option>
+      </select>
+      <div id="stateConfirm" style="display:none;margin-top:16px;padding:12px 16px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;display:none;align-items:center;gap:10px;">
+        <span style="font-size:1.1rem;">📍</span>
+        <span id="stateConfirmText" style="font-size:0.88rem;font-weight:600;color:var(--green);"></span>
+      </div>
+      <p style="margin-top:14px;font-size:0.78rem;color:var(--slate-light);line-height:1.5;">Prices are AI-estimated mid-range contractor rates for the selected state. Always verify with local contractors before finalizing a budget.</p>
+    </div>
+    <div style="margin-top:24px;display:flex;justify-content:flex-end;">
+      <button class="step-nav-btn next" onclick="goStep('general')" id="locNextBtn" disabled
+        style="padding:10px 28px;font-size:0.88rem;">
+        Next: General →
+      </button>
+    </div>
+  </div>
+
   <div class="panels-area" id="panelsArea"></div>
 
   <div class="results-page" id="resultsPage">
@@ -632,6 +664,20 @@ let state = {};
 let activeTab = CATS[0].id;
 const PROXY_URL = 'https://rehab-estimator-delta.vercel.app/api/ai-pricing';
 
+// ── SELECTED STATE ─────────────────────────────────────────────────────────
+let selectedState = '';  // empty = no state chosen yet
+
+const US_STATES = [
+  'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut',
+  'Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa',
+  'Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan',
+  'Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada',
+  'New Hampshire','New Jersey','New Mexico','New York','North Carolina',
+  'North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island',
+  'South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont',
+  'Virginia','Washington','West Virginia','Wisconsin','Wyoming'
+];
+
 function getGeneralCats()  { return CATS.filter(c => c.group==='general').map(c => c.id); }
 function getExteriorCats() { return CATS.filter(c => c.group==='exterior').map(c => c.id); }
 function getInteriorCats() { return CATS.filter(c => c.group==='interior').map(c => c.id); }
@@ -647,22 +693,27 @@ let currentStep = 'general';
 function goStep(step) {
   currentStep = step;
   const panelsArea    = document.getElementById('panelsArea');
+  const locationPage  = document.getElementById('locationPage');
   const resultsPage   = document.getElementById('resultsPage');
-  const tabBar        = document.getElementById('tabBar');
   const tabBarWrap    = document.getElementById('tabBarWrap');
   const sectionHeader = document.getElementById('sectionHeader');
 
-  if (step === 'results') {
-    panelsArea.style.display = 'none';
-    tabBarWrap.style.display = 'none';
-    sectionHeader.style.display = 'none';
+  // Hide all content areas first
+  panelsArea.style.display   = 'none';
+  locationPage.style.display = 'none';
+  tabBarWrap.style.display   = 'none';
+  sectionHeader.style.display= 'none';
+  resultsPage.classList.remove('active');
+
+  if (step === 'location') {
+    locationPage.style.display = 'block';
+  } else if (step === 'results') {
     resultsPage.classList.add('active');
     buildResultsPage();
   } else {
     panelsArea.style.display    = '';
-    tabBarWrap.style.display = '';
+    tabBarWrap.style.display    = '';
     sectionHeader.style.display = '';
-    resultsPage.classList.remove('active');
     buildTabsForStep(step);
     buildPanelsForStep(step);
     renderAll();
@@ -672,8 +723,8 @@ function goStep(step) {
 }
 
 function applyStepUI(step) {
-  const steps = ['general','exterior','interior','results'];
-  const ids   = ['gen','ext','int','res'];
+  const steps = ['location','general','exterior','interior','results'];
+  const ids   = ['loc','gen','ext','int','res'];
   const ci    = steps.indexOf(step);
   steps.forEach((s, idx) => {
     const el = document.getElementById('step-' + ids[idx]);
@@ -682,28 +733,41 @@ function applyStepUI(step) {
     if (idx < ci) el.classList.add('done');
     else if (idx === ci) el.classList.add('active');
   });
-  for (let i=0; i<3; i++) {
+  for (let i=0; i<4; i++) {
     const el = document.getElementById('connector-' + i);
     if (el) el.classList.toggle('done', i < ci);
   }
-  const titles    = {general:'General Conditions', exterior:'Exterior Expenses', interior:'Interior Expenses', results:'Results'};
-  const nextLbls  = {general:'Next: Exterior →', exterior:'Next: Interior →', interior:'Next: Results →'};
-  document.getElementById('sectionHeaderTitle').textContent = titles[step] || '';
+  // Show selected state in location step circle when done
+  const locCircle = document.getElementById('step-circle-loc');
+  if (locCircle && selectedState && step !== 'location') {
+    locCircle.textContent = '✓';
+  }
+  const extLabel = estimatorMode === 'newbuild' ? 'Site & Structure' : 'Exterior Expenses';
+  const intLabel = estimatorMode === 'newbuild' ? 'Interior & Systems' : 'Interior Expenses';
+  const titles   = {location:'Project Location', general:'General Conditions', exterior: extLabel, interior: intLabel, results:'Results'};
+  const nextLbls = {location:'Next: General →', general:'Next: Exterior →', exterior:'Next: Interior →', interior:'Next: Results →'};
+  const hdrEl = document.getElementById('sectionHeaderTitle');
+  if (hdrEl) hdrEl.textContent = titles[step] || '';
   const nextBtn = document.getElementById('nextStepBtn');
   const prevBtn = document.getElementById('prevStepBtn');
   if (nextBtn) { nextBtn.style.display = step==='results' ? 'none' : ''; nextBtn.textContent = nextLbls[step] || ''; }
-  if (prevBtn)  prevBtn.style.display  = step !== 'general' ? '' : 'none';
+  if (prevBtn)  prevBtn.style.display  = step !== 'location' ? '' : 'none';
 }
 
 function nextStep() {
-  if (currentStep==='general')  goStep('exterior');
-  else if (currentStep==='exterior') goStep('interior');
-  else if (currentStep==='interior') goStep('results');
+  if (currentStep==='location') {
+    if (!selectedState) { aiStatus('error','⚠ Please select a state before continuing.'); return; }
+    goStep('general');
+  }
+  else if (currentStep==='general')   goStep('exterior');
+  else if (currentStep==='exterior')  goStep('interior');
+  else if (currentStep==='interior')  goStep('results');
 }
 function prevStep() {
-  if (currentStep==='interior') goStep('exterior');
-  else if (currentStep==='exterior') goStep('general');
-  else if (currentStep==='results')  goStep('interior');
+  if (currentStep==='general')   goStep('location');
+  else if (currentStep==='interior')  goStep('exterior');
+  else if (currentStep==='exterior')  goStep('general');
+  else if (currentStep==='results')   goStep('interior');
 }
 
 function getCats(step) {
@@ -825,7 +889,7 @@ function switchMode(mode) {
   // Reset state and restart from General
   state = {};
   loadState();
-  currentStep = 'general';
+  currentStep = 'location';
   activeTab = getGeneralCats()[0];
   buildTabsForStep('general');
   buildPanelsForStep('general');
@@ -837,16 +901,40 @@ function switchMode(mode) {
 function initApp() {
   CATS = getCATSForMode(estimatorMode);
   loadState();
-  activeTab = getGeneralCats()[0];
-  buildTabsForStep('general');
-  buildPanelsForStep('general');
-  renderAll();
-  recalcAll();
-  applyStepUI('general');
+  // Populate state dropdown
+  const dropdown = document.getElementById('stateDropdown');
+  if (dropdown && dropdown.options.length === 1) {
+    US_STATES.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      dropdown.appendChild(opt);
+    });
+  }
+  // Start on location step
+  currentStep = 'location';
+  goStep('location');
   loadTitle();
   document.getElementById('tabBar').addEventListener('scroll', updateTabScrollBtns);
   initTabScrollObserver();
-  window._rehabAppReady = true; // allow export to localStorage after init completes
+  window._rehabAppReady = true;
+}
+
+function onStateChange(val) {
+  selectedState = val;
+  const confirmEl  = document.getElementById('stateConfirm');
+  const confirmTxt = document.getElementById('stateConfirmText');
+  const nextBtn    = document.getElementById('locNextBtn');
+  if (val) {
+    confirmEl.style.display  = 'flex';
+    confirmTxt.textContent   = `Prices will reflect ${val} contractor market rates`;
+    nextBtn.disabled = false;
+    // Update step label under circle
+    const subEl = document.getElementById('step-sub-loc');
+    if (subEl) subEl.textContent = val;
+  } else {
+    confirmEl.style.display = 'none';
+    nextBtn.disabled = true;
+  }
 }
 
 function loadState() {
@@ -1105,54 +1193,86 @@ function loadTitle() {
 // AI AUTO-FILL
 // ============================================================
 async function doAIFill() {
+  if (!selectedState) {
+    aiStatus('error', '⚠ Please select a state on the Location step before fetching prices.');
+    return;
+  }
   const now = Date.now();
   const lastCall = parseInt(localStorage.getItem('ai_last_call')||'0');
-  if (now - lastCall < 10000) {
-    const secs = Math.ceil((10000-(now-lastCall))/1000);
+  if (now - lastCall < 15000) {
+    const secs = Math.ceil((15000-(now-lastCall))/1000);
     aiStatus('error',`⚠ Please wait ${secs} more second${secs===1?'':'s'} before fetching prices again.`);
     return;
   }
   localStorage.setItem('ai_last_call', now);
   const btn = document.getElementById('aiBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin" style="border-color:#fff;border-top-color:transparent"></span> Fetching prices…';
-  aiStatus('loading', 'Fetching Utah market prices…');
+  btn.innerHTML = '<span class="spin" style="border-color:#fff;border-top-color:transparent"></span> Fetching…';
+  aiStatus('loading', `Fetching ${selectedState} contractor prices — sending 3 parallel requests… please wait.`);
 
-  // Collect all labeled non-contingency rows
-  const items = [];
+  // ── Collect items split by group for parallel requests ───────────────────
+  const groupItems = { general: [], exterior: [], interior: [] };
   CATS.forEach(cat => {
     state[cat.id].rows.forEach(row => {
-      if (row.label && !row.isContingency) items.push({cat:cat.label, label:row.label, unit:row.unit});
+      if (row.label && !row.isContingency) {
+        groupItems[cat.group].push({cat: cat.label, label: row.label, unit: row.unit});
+      }
     });
   });
 
-  try {
-    const res = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({items})
-    });
-
-    if (!res.ok) {
-      let errMsg = 'Server error ' + res.status;
-      try { const e = await res.json(); errMsg = e.error || errMsg; } catch(_){}
-      throw new Error(errMsg);
+  // ── Single fetch helper with 52s timeout ─────────────────────────────────
+  async function fetchGroup(items, groupName) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 52000);
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ items, state: selectedState }),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (res.status === 429) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || 'Rate limit reached. Please wait and try again.');
+      }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || 'Server error ' + res.status);
+      }
+      return await res.json();
+    } catch(e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw new Error(`${groupName} request timed out — please try again.`);
+      throw e;
     }
+  }
 
-    const data = await res.json();
-    if (!data.prices) throw new Error('No prices returned.');
+  try {
+    // ── Fire all 3 groups in parallel ──────────────────────────────────────
+    const [genData, extData, intData] = await Promise.all([
+      fetchGroup(groupItems.general,  'General'),
+      fetchGroup(groupItems.exterior, 'Exterior'),
+      fetchGroup(groupItems.interior, 'Interior'),
+    ]);
 
-    // Apply prices to state
+    // Merge all price results
+    const allPrices = {
+      ...(genData.prices || {}),
+      ...(extData.prices || {}),
+      ...(intData.prices || {})
+    };
+
+    // ── Apply prices to state ─────────────────────────────────────────────
     let totalCount = 0;
     CATS.forEach(cat => {
       state[cat.id].rows.forEach((row, i) => {
         if (row.isContingency) return;
         const key = `${cat.label}|${row.label}`;
-        const p = data.prices[key];
+        const p = allPrices[key];
         if (p) {
           if (typeof p.labor    === 'number' && p.labor    > 0) state[cat.id].rows[i].labor    = p.labor.toFixed(2);
           if (typeof p.material === 'number' && p.material > 0) state[cat.id].rows[i].material = p.material.toFixed(2);
-          // qty intentionally NOT set — user must enter quantity manually
           if (p.labor > 0 || p.material > 0) {
             state[cat.id].rows[i].aiHit = true;
             totalCount++;
@@ -1161,13 +1281,12 @@ async function doAIFill() {
       });
     });
 
-    // Rebuild all panels so every tab shows updated prices in inputs
     buildPanelsForStep(currentStep);
     renderAll();
     recalcAll();
     persistNow();
 
-    aiStatus('success', `✓ Filled ${totalCount} line items with Q1 2025 Utah market prices. Review and adjust quantities to calculate totals.`);
+    aiStatus('success', `✓ Filled ${totalCount} items with ${selectedState} contractor prices. Adjust quantities to calculate totals.`);
 
   } catch(e) {
     localStorage.removeItem('ai_last_call');
