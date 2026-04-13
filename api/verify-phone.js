@@ -1,50 +1,60 @@
+/**
+ * /api/verify-phone.js
+ *
+ * Phone gate for the Utah REIA Rehab Estimator (paid tool).
+ * Looks up the caller's phone in the "Rehab Estimator Subscribers" Airtable table.
+ *   - Subscription Status = "Active"   → access granted
+ *   - Subscription Status = "Inactive" → access denied (cancelled)
+ *   - Not found                        → access denied (not subscribed)
+ *
+ * Required Vercel env vars:
+ *   AIRTABLE_API_KEY_REHAB   — Airtable personal access token
+ *   AIRTABLE_BASE_ID_REHAB   — Airtable base ID (starts with "app…")
+ *   RECAPTCHA_SECRET_KEY     — Google reCAPTCHA v2/v3 secret key
+ */
+
 export default async function handler(req, res) {
 
-// ── ALLOWED ORIGINS ──────────────────────────────────────────────────────────
-// Add any domain that should be allowed to call this API
-const ALLOWED_ORIGINS = [
-  "https://utahreia.org",
-  "https://www.utahreia.org",
-  "https://app.gohighlevel.com",
-  "http://localhost:5500",
-  "http://127.0.0.1:5500",
-  "http://localhost:3000"
-];
+  // ── ALLOWED ORIGINS ──────────────────────────────────────────────────────────
+  const ALLOWED_ORIGINS = [
+    "https://utahreia.org",
+    "https://www.utahreia.org",
+    "https://app.gohighlevel.com",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:3000"
+  ];
 
-function setCorsHeaders(req, res) {
-  const origin = req.headers.origin || "";
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin"); // tells CDN not to cache for wrong origin
+  function setCorsHeaders(req, res) {
+    const origin = req.headers.origin || "";
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Max-Age", "86400");
   }
-  // If origin not in list, we set nothing — browser will block the request
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age", "86400");
-}
 
-  // Always set CORS headers first, before anything else
   setCorsHeaders(req, res);
 
-  // Handle preflight
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // Block requests from non-allowed origins at the application level too
   const origin = req.headers.origin || "";
   if (origin && !ALLOWED_ORIGINS.includes(origin)) {
     console.warn(`[ORIGIN BLOCKED] ${origin}`);
     return res.status(403).json({ valid: false, message: "Access denied." });
   }
 
-  // ── IP EXTRACTION ────────────────────────────────────────────────────────
+  // ── IP EXTRACTION ────────────────────────────────────────────────────────────
   const ip =
     req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
     req.headers["x-real-ip"] ||
     req.socket?.remoteAddress ||
     "unknown";
 
-  // ── IN-MEMORY RATE LIMITING ───────────────────────────────────────────────
+  // ── IN-MEMORY RATE LIMITING ──────────────────────────────────────────────────
   // Max 10 attempts per IP per 15 minutes
   if (!global._verifyRateMap) global._verifyRateMap = new Map();
   const now = Date.now();
@@ -63,9 +73,11 @@ function setCorsHeaders(req, res) {
     });
   }
 
-  const { phone, captcha } = req.body;
+  // ── PARSE BODY ───────────────────────────────────────────────────────────────
+  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  const { phone, captcha } = body;
 
-  // ── INPUT VALIDATION ─────────────────────────────────────────────────────
+  // ── INPUT VALIDATION ─────────────────────────────────────────────────────────
   if (!phone || typeof phone !== "string") {
     return res.status(400).json({ valid: false, message: "No phone number provided." });
   }
@@ -76,8 +88,9 @@ function setCorsHeaders(req, res) {
   if (cleanPhone.length < 10 || cleanPhone.length > 11) {
     return res.status(400).json({ valid: false, message: "Invalid phone number format." });
   }
+  const last10 = cleanPhone.slice(-10);
 
-  // ── RECAPTCHA VERIFICATION ────────────────────────────────────────────────
+  // ── RECAPTCHA VERIFICATION ───────────────────────────────────────────────────
   const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
   if (!recaptchaSecret) {
     console.error("[CONFIG] RECAPTCHA_SECRET_KEY not set");
@@ -91,7 +104,7 @@ function setCorsHeaders(req, res) {
     });
     const recaptchaData = await recaptchaRes.json();
     if (!recaptchaData.success) {
-      console.warn(`[CAPTCHA FAIL] IP: ${ip}, Phone: ${cleanPhone.slice(0, 6)}****`);
+      console.warn(`[CAPTCHA FAIL] IP: ${ip}, Phone: ${last10.slice(0, 6)}****`);
       return res.status(400).json({ valid: false, message: "CAPTCHA verification failed. Please try again." });
     }
   } catch (err) {
@@ -99,32 +112,76 @@ function setCorsHeaders(req, res) {
     return res.status(502).json({ valid: false, message: "Could not verify CAPTCHA. Please try again." });
   }
 
-  // ── PHONE VERIFICATION ────────────────────────────────────────────────────
-  const allowedPhones = (process.env.ALLOWED_PHONES || "")
-    .split(",").map(p => p.trim().replace(/\D/g, "")).filter(Boolean);
-  const isValid = allowedPhones.length === 0 || allowedPhones.includes(cleanPhone);
+  // ── AIRTABLE LOOKUP ──────────────────────────────────────────────────────────
+  const AIRTABLE_KEY    = process.env.AIRTABLE_API_KEY_REHAB;
+  const AIRTABLE_BASE   = process.env.AIRTABLE_BASE_ID_REHAB;
+  const AIRTABLE_TABLE  = "Rehab Estimator Subscribers";
 
-  // ── ACCESS LOG ────────────────────────────────────────────────────────────
+  if (!AIRTABLE_KEY || !AIRTABLE_BASE) {
+    console.error("[CONFIG] Missing AIRTABLE_API_KEY_REHAB or AIRTABLE_BASE_ID_REHAB");
+    return res.status(500).json({ valid: false, message: "Server configuration error." });
+  }
+
+  const BASE_URL = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${encodeURIComponent(AIRTABLE_TABLE)}`;
+  const atHeaders = {
+    Authorization: `Bearer ${AIRTABLE_KEY}`,
+    "Content-Type": "application/json"
+  };
+
+  // Normalize stored phone to last 10 digits for comparison
+  const phoneFormula =
+    `RIGHT(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({Phone Number},'(',''),')',''),'-',''),' ',''),10)='${last10}'`;
+
+  let subscriber = null;
+  try {
+    const searchRes  = await fetch(
+      `${BASE_URL}?filterByFormula=${encodeURIComponent(phoneFormula)}`,
+      { headers: atHeaders }
+    );
+    const searchData = await searchRes.json();
+    if (searchData.records && searchData.records.length > 0) {
+      subscriber = searchData.records[0].fields;
+    }
+  } catch (err) {
+    console.error("[AIRTABLE ERROR]", err.message);
+    return res.status(502).json({ valid: false, message: "Verification service unavailable. Please try again." });
+  }
+
+  // ── ACCESS DECISION ──────────────────────────────────────────────────────────
+  let result, message;
+
+  if (!subscriber) {
+    result  = false;
+    message = "No active subscription found for this number. Please subscribe at utahreia.org to access the Rehab Estimator.";
+  } else if ((subscriber["Subscription Status"] || "").toLowerCase() === "active") {
+    result  = true;
+    message = "Access granted.";
+  } else {
+    // Inactive / cancelled
+    result  = false;
+    message = "Your subscription is inactive. Please renew at utahreia.org to regain access.";
+  }
+
+  // ── ACCESS LOG ───────────────────────────────────────────────────────────────
   console.log("[ACCESS LOG]", JSON.stringify({
     time: new Date().toISOString(),
     ip,
     origin,
-    phone: cleanPhone.slice(0, 6) + "****",
-    result: isValid ? "GRANTED" : "DENIED",
+    phone: last10.slice(0, 6) + "****",
+    subscriptionStatus: subscriber ? (subscriber["Subscription Status"] || "unknown") : "not found",
+    result: result ? "GRANTED" : "DENIED",
     userAgent: req.headers["user-agent"]?.substring(0, 80) || "unknown"
   }));
 
-  if (isValid) {
+  if (result) {
     const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
     return res.status(200).json({
       valid: true,
       expiresAt,
-      token: `ureia_${expiresAt}_${Buffer.from(cleanPhone.slice(-4)).toString("base64")}`
+      token: `ureia_${expiresAt}_${Buffer.from(last10.slice(-4)).toString("base64")}`,
+      name: subscriber["Name"] || ""
     });
   }
 
-  return res.status(200).json({
-    valid: false,
-    message: "Phone number not found. Please contact Utah REIA for access."
-  });
+  return res.status(200).json({ valid: false, message });
 }
