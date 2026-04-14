@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Scope AI — Subscription & Reminder Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #1e293b; padding: 40px 20px; }
+  .page { max-width: 860px; margin: 0 auto; }
+
+  h1 { font-size: 1.7rem; font-weight: 800; color: #1e293b; margin-bottom: 6px; }
+  .subtitle { color: #64748b; font-size: 0.95rem; margin-bottom: 40px; }
+
+  /* ── SECTION ── */
+  .section { margin-bottom: 48px; }
+  .section-title {
+    font-size: 1rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 20px;
+    border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;
+  }
+
+  /* ── FLOW STEPS ── */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: flex; gap: 20px; align-items: flex-start;
+    background: #fff; border-radius: 14px; padding: 22px 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 4px;
+    border-left: 5px solid #e2e8f0;
+    position: relative;
+  }
+  .step.green  { border-left-color: #10b981; }
+  .step.blue   { border-left-color: #3b82f6; }
+  .step.purple { border-left-color: #8b5cf6; }
+  .step.orange { border-left-color: #f59e0b; }
+  .step.red    { border-left-color: #ef4444; }
+
+  .step-num {
+    width: 36px; height: 36px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-weight: 800;
+    font-size: 0.95rem; flex-shrink: 0; margin-top: 2px;
+  }
+  .green  .step-num { background: #d1fae5; color: #065f46; }
+  .blue   .step-num { background: #dbeafe; color: #1e40af; }
+  .purple .step-num { background: #ede9fe; color: #5b21b6; }
+  .orange .step-num { background: #fef3c7; color: #92400e; }
+  .red    .step-num { background: #fee2e2; color: #991b1b; }
+
+  .step-body { flex: 1; }
+  .step-label { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+  .step-desc { color: #475569; font-size: 0.9rem; line-height: 1.6; }
+  .step-tag {
+    display: inline-block; font-size: 0.72rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px; margin-bottom: 6px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .tag-ghl    { background: #dbeafe; color: #1d4ed8; }
+  .tag-api    { background: #ede9fe; color: #6d28d9; }
+  .tag-airtable { background: #d1fae5; color: #065f46; }
+  .tag-auto   { background: #fef3c7; color: #92400e; }
+
+  .arrow {
+    text-align: center; font-size: 1.4rem; color: #94a3b8;
+    margin: 2px 0; line-height: 1;
+  }
+
+  /* ── INFO BOXES ── */
+  .infobox {
+    background: #fff; border-radius: 14px; padding: 22px 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 16px;
+  }
+  .infobox-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .infobox p { color: #475569; font-size: 0.9rem; line-height: 1.6; }
+
+  /* ── COMPARISON TABLE ── */
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  th { background: #1e293b; color: #fff; padding: 12px 16px; text-align: left; font-size: 0.85rem; font-weight: 600; }
+  td { padding: 12px 16px; font-size: 0.88rem; border-bottom: 1px solid #f1f5f9; color: #374151; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .yes { color: #10b981; font-weight: 700; }
+  .no  { color: #ef4444; font-weight: 700; }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight {
+    background: linear-gradient(135deg, #ecfdf5, #eff6ff);
+    border: 1.5px solid #a7f3d0; border-radius: 14px;
+    padding: 20px 24px; margin-bottom: 16px;
+  }
+  .highlight strong { color: #065f46; }
+
+  /* ── CODE ── */
+  code {
+    background: #f1f5f9; padding: 2px 7px; border-radius: 5px;
+    font-family: 'Courier New', monospace; font-size: 0.82rem; color: #7c3aed;
+  }
+
+  @media print {
+    body { background: #fff; padding: 20px; }
+    .step, .infobox, table { box-shadow: none; border: 1px solid #e2e8f0; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Build Scope AI — How the Subscription & Reminder Works</h1>
+  <p class="subtitle">A plain-English breakdown of every step, from purchase to SMS reminder.</p>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Part 1 — When Someone Buys a Subscription</div>
+    <div class="flow">
+
+      <div class="step green">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <span class="step-tag tag-ghl">GHL</span>
+          <div class="step-label">Customer purchases on GHL</div>
+          <div class="step-desc">
+            The customer buys the Build Scope AI subscription through your GHL payment/funnel page.
+            GHL detects the successful payment and fires a <strong>webhook</strong> — basically an
+            automatic notification sent to your Vercel server.
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step blue">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <span class="step-tag tag-api">Vercel API</span>
+          <div class="step-label">Your server receives the webhook at <code>/api/subscribe</code></div>
+          <div class="step-desc">
+            GHL sends the customer's <strong>phone, name, and email</strong> to your Vercel server.
+            Your server automatically calculates:
+            <br><br>
+            • <strong>Expiry Date</strong> = today + 1 month<br>
+            • <strong>Reminder Date</strong> = expiry date − 5 days
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step green">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <span class="step-tag tag-airtable">Airtable</span>
+          <div class="step-label">A record is saved in Airtable</div>
+          <div class="step-desc">
+            Your server creates (or updates) a row in the <strong>"Rehab Estimator Subscribers"</strong>
+            Airtable table with:
+            <br><br>
+            • Phone Number, Name, Email<br>
+            • Subscription Status = <strong>Active</strong><br>
+            • Expiring Date (1 month from today)<br>
+            • Reminder Date (5 days before expiry)
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step purple">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <span class="step-tag tag-api">Vercel API → GHL</span>
+          <div class="step-label">The contact is enrolled in the reminder workflow</div>
+          <div class="step-desc">
+            Your server calls the GHL API to:
+            <br><br>
+            1. <strong>Find or create the contact</strong> in GHL using their phone number<br>
+            2. <strong>Enroll that specific contact</strong> in your reminder workflow<br>
+            3. Tell GHL: <em>"start this workflow on [Reminder Date]"</em>
+            <br><br>
+            GHL then <strong>holds the workflow</strong> and waits silently until that date.
+            No action is needed from you.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Part 2 — When the Reminder Date Arrives (5 Days Before Expiry)</div>
+    <div class="flow">
+
+      <div class="step orange">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <span class="step-tag tag-auto">Automatic</span>
+          <div class="step-label">GHL fires the workflow on its own</div>
+          <div class="step-desc">
+            On the reminder date (5 days before expiry), GHL automatically wakes up and
+            runs the workflow for that contact. You don't do anything — GHL handles the scheduling.
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step orange">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <span class="step-tag tag-ghl">GHL</span>
+          <div class="step-label">First SMS sent — "expires in 5 days"</div>
+          <div class="step-desc">
+            The workflow runs its first <strong>Send SMS</strong> action. GHL already knows the
+            contact (from step 4), so it sends to the right number automatically.
+            <br><br>
+            <em>"Hi {{contact.first_name}}, your Build Scope AI subscription expires in 5 days.
+            Renew here to keep your access: [link]"</em>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step orange">
+        <div class="step-num">7</div>
+        <div class="step-body">
+          <span class="step-tag tag-auto">Automatic</span>
+          <div class="step-label">GHL waits 5 days</div>
+          <div class="step-desc">
+            The workflow pauses for 5 days. During this time the subscriber may or may not renew.
+            GHL just waits — no action needed from you.
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step purple">
+        <div class="step-num">8</div>
+        <div class="step-body">
+          <span class="step-tag tag-ghl">GHL</span>
+          <div class="step-label">If/Else check — did they renew?</div>
+          <div class="step-desc">
+            GHL checks the contact's <strong>Rehab Subscription Status</strong> custom field:
+            <br><br>
+            • <strong>= Active</strong> → they renewed → workflow ends, no more messages ✅<br>
+            • <strong>= Inactive / anything else</strong> → they didn't renew → send expiry SMS ❌
+            <br><br>
+            This field is automatically updated by your server — <code>Active</code> on subscribe,
+            <code>Inactive</code> on cancel/expiry.
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step red">
+        <div class="step-num">9</div>
+        <div class="step-body">
+          <span class="step-tag tag-ghl">GHL</span>
+          <div class="step-label">Second SMS sent — "subscription has expired"</div>
+          <div class="step-desc">
+            Only sent if the If/Else determined they did <strong>not</strong> renew.
+            <br><br>
+            <em>"Hi {{contact.first_name}}, your Build Scope AI subscription has now expired.
+            You no longer have access to the Rehab Estimator. Renew here to get back in: [link]"</em>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Part 3 — When Someone Accesses the Calculator</div>
+    <div class="flow">
+
+      <div class="step blue">
+        <div class="step-num">10</div>
+        <div class="step-body">
+          <span class="step-tag tag-api">Vercel API</span>
+          <div class="step-label">User enters their phone number on the gate screen</div>
+          <div class="step-desc">
+            When someone opens the Rehab Estimator, they see a phone number gate.
+            They enter their phone and click "Unlock Estimator."
+            Your server checks the <strong>Airtable table</strong> for that phone number.
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+
+      <div class="step green">
+        <div class="step-num">11</div>
+        <div class="step-body">
+          <span class="step-tag tag-airtable">Airtable</span>
+          <div class="step-label">Server checks Subscription Status</div>
+          <div class="step-desc">
+            • <strong>Status = Active</strong> → access granted, calculator unlocks ✅<br>
+            • <strong>Status = Inactive</strong> → access denied, shown renewal message ❌<br>
+            • <strong>Not found</strong> → access denied, shown subscribe message ❌
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Part 4 — When Someone Cancels</div>
+    <div class="flow">
+
+      <div class="step red">
+        <div class="step-num">12</div>
+        <div class="step-body">
+          <span class="step-tag tag-ghl">GHL</span>
+          <div class="step-label">Cancellation triggers another webhook</div>
+          <div class="step-desc">
+            When a customer cancels, GHL fires a webhook to <code>/api/cancel-subscription</code>.
+            Your server finds their record in Airtable and sets:
+            <br><br>
+            • Subscription Status = <strong>Inactive</strong><br>
+            • Subscription Cancelled = <strong>true</strong><br>
+            • Expiring Date = <strong>today</strong> (immediate cut-off)
+            <br><br>
+            Next time they try to access the calculator, they'll be denied.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Why GHL Knows Who to Send the SMS To</div>
+
+    <div class="highlight">
+      <strong>The key thing to understand:</strong> Your Vercel server doesn't just save data — it
+      also calls the GHL API directly to find/create the contact AND enroll them in the workflow
+      by their GHL Contact ID. So by the time GHL runs the workflow, it already has the contact
+      linked. The workflow doesn't need to "find" anyone — the contact is already attached.
+    </div>
+
+    <div class="infobox">
+      <div class="infobox-title">🔗 Think of it like this...</div>
+      <p>
+        Imagine you hand a letter to a courier and say <em>"deliver this to John Smith at 123 Main St
+        on April 20th."</em> The courier doesn't need to look up John's address on the day — you already
+        told them. GHL works the same way: your server says <em>"enroll Contact ID abc123 in this
+        workflow, starting April 20th."</em> GHL just executes it on that date.
+      </p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Summary Table</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Who Triggers It</th>
+          <th>What Happens</th>
+          <th>Manual Work?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>New subscription</td>
+          <td>GHL payment webhook</td>
+          <td>Airtable record created, GHL contact enrolled in reminder workflow</td>
+          <td class="no">None</td>
+        </tr>
+        <tr>
+          <td>Reminder SMS (day 0)</td>
+          <td>GHL (auto, on reminder date)</td>
+          <td>SMS sent — "expires in 5 days, renew here"</td>
+          <td class="no">None</td>
+        </tr>
+        <tr>
+          <td>Expiry SMS (day 5)</td>
+          <td>GHL (auto, after 5-day wait)</td>
+          <td>Checks if renewed — sends "expired" SMS only if still Inactive</td>
+          <td class="no">None</td>
+        </tr>
+        <tr>
+          <td>Calculator access</td>
+          <td>User enters phone</td>
+          <td>Airtable checked — Active = unlock, Inactive = deny</td>
+          <td class="no">None</td>
+        </tr>
+        <tr>
+          <td>Cancellation</td>
+          <td>GHL cancellation webhook</td>
+          <td>Airtable record set to Inactive, access revoked immediately</td>
+          <td class="no">None</td>
+        </tr>
+        <tr>
+          <td>Renewal (re-subscribe)</td>
+          <td>GHL payment webhook</td>
+          <td>Existing Airtable record updated, new expiry set, re-enrolled in reminder</td>
+          <td class="no">None</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">Your GHL Workflow — What It Looks Like</div>
+    <div class="infobox">
+      <div class="infobox-title">📋 Your workflow has 4 actions total</div>
+      <p>
+        Because all the complexity (finding the contact, calculating dates, scheduling) is handled
+        by your Vercel server code, the GHL workflow stays clean:
+        <br><br>
+        <strong>No trigger needed</strong> — enrollment comes from the API, not a GHL event.<br>
+        <strong>No Find Contact needed</strong> — the contact is already attached on enrollment.<br>
+        <br><br>
+        <strong>Action 1:</strong> Send SMS — <em>"expires in 5 days, renew here"</em><br>
+        <strong>Action 2:</strong> Wait — 5 days<br>
+        <strong>Action 3:</strong> If/Else — <code>Rehab Subscription Status</code> = Active?<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;→ <strong>Yes (Branch):</strong> End Workflow<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;→ <strong>No (None):</strong> Send SMS — <em>"subscription has expired, renew here"</em>
+      </p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -166,7 +166,7 @@ export default async function handler(req, res) {
           Version:        "2021-07-28"
         };
 
-        // 1) Upsert contact in GHL to get contactId
+        // 1) Upsert contact in GHL to get contactId + set Rehab Subscription Status = Active
         const upsertRes  = await fetch("https://services.leadconnectorhq.com/contacts/upsert", {
           method: "POST",
           headers: ghlHeaders,
@@ -174,7 +174,10 @@ export default async function handler(req, res) {
             locationId: GHL_LOCATION,
             phone: normalizedPhone,
             ...(name  ? { name  } : {}),
-            ...(email ? { email } : {})
+            ...(email ? { email } : {}),
+            customFields: [
+              { key: "rehab_subscription_status", field_value: "Active" }
+            ]
           })
         });
         const upsertData = await upsertRes.json();

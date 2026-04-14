@@ -112,6 +112,40 @@ export default async function handler(req, res) {
     });
 
     console.log(`[CANCEL] Marked inactive: ${normalizedPhone} on ${today}`);
+
+    // ── UPDATE GHL CUSTOM FIELD ──────────────────────────────────────────────
+    const GHL_KEY      = process.env.GHL_API_KEY;
+    const GHL_LOCATION = process.env.GHL_LOCATION_ID;
+
+    if (GHL_KEY && GHL_LOCATION) {
+      try {
+        const ghlHeaders = {
+          Authorization:  `Bearer ${GHL_KEY}`,
+          "Content-Type": "application/json",
+          Version:        "2021-07-28"
+        };
+
+        const upsertRes  = await fetch("https://services.leadconnectorhq.com/contacts/upsert", {
+          method: "POST",
+          headers: ghlHeaders,
+          body: JSON.stringify({
+            locationId: GHL_LOCATION,
+            phone: normalizedPhone,
+            customFields: [
+              { key: "rehab_subscription_status", field_value: "Inactive" }
+            ]
+          })
+        });
+        const upsertData = await upsertRes.json();
+        const contactId  = upsertData?.contact?.id || upsertData?.contact?._id || upsertData?.id;
+        if (contactId) {
+          console.log(`[CANCEL] GHL custom field set to Inactive for contact ${contactId}`);
+        }
+      } catch (ghlErr) {
+        console.error("[CANCEL] GHL update failed (non-fatal):", ghlErr.message);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       action:  "cancelled",
