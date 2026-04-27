@@ -154,7 +154,7 @@ export default async function handler(req, res) {
     // Enrolls the contact in a GHL workflow set up to send a renewal reminder.
     // The workflow fires on the eventStartTime passed below (5 days before expiry).
     // Requires: GHL_API_KEY, GHL_LOCATION_ID, GHL_REMINDER_WORKFLOW_ID in Vercel env.
-    const GHL_KEY         = process.env.GHL_API_KEY;
+    const GHL_KEY         = process.env.GHL_BUILDSCOPE_API_KEY;
     const GHL_LOCATION    = process.env.GHL_LOCATION_ID;
     const GHL_WORKFLOW_ID = process.env.GHL_REMINDER_WORKFLOW_ID;
 

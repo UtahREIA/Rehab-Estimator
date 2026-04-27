@@ -114,7 +114,7 @@ export default async function handler(req, res) {
     console.log(`[CANCEL] Marked inactive: ${normalizedPhone} on ${today}`);
 
     // ── UPDATE GHL CUSTOM FIELD ──────────────────────────────────────────────
-    const GHL_KEY      = process.env.GHL_API_KEY;
+    const GHL_KEY      = process.env.GHL_BUILDSCOPE_API_KEY;
     const GHL_LOCATION = process.env.GHL_LOCATION_ID;
 
     if (GHL_KEY && GHL_LOCATION) {
