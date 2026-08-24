@@ -28,5 +28,8 @@
         { "key": "Access-Control-Max-Age",       "value": "86400" }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/check-keys", "schedule": "10 13 * * *" }
   ]
 }
